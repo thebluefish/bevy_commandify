@@ -5,7 +5,7 @@ Derive macro for creating bevy `Commands` methods.
 ```rust
 /// A command that spawns a bundle `n` times
 #[command]
-fn create_stuff(world: &mut World, bundle: B, n: usize) {
+fn create_stuff<B: Bundle + Clone>(world: &mut World, bundle: B, n: usize) {
     for _ in 0..times {
         world.spawn(bundle.clone());
     }
