@@ -97,7 +97,7 @@ pub fn command(_args: ProcTokenStream, input: ProcTokenStream) -> ProcTokenStrea
                     fn #method_name #generics (&mut self, #(#fields)*);
                 }
 
-                impl #trait_name for Commands<'_, '_> {
+                impl #trait_name for bevy::ecs::system::Commands<'_, '_> {
                     fn #method_name #generics (&mut self, #(#fields)*) {
                         self.add(#cmd_name {#(#field_names)*});
                     }
