@@ -1,13 +1,12 @@
 use proc_macro::{TokenStream as ProcTokenStream};
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::{quote, ToTokens};
-use syn::{parse_macro_input, ItemFn, Signature, ReturnType, FnArg, Type, Item, DeriveInput, Data, Fields, GenericParam};
+use syn::{parse_macro_input, ItemFn, Signature, ReturnType, FnArg, Type, Item, GenericParam};
 use inflector::*;
 
 /// Promotes a function to a Command struct, and creates an equivalent Commands method via trait extensions
 #[proc_macro_attribute]
 pub fn command(_args: ProcTokenStream, input: ProcTokenStream) -> ProcTokenStream {
-    let ret = input.clone();
     let input = parse_macro_input!(input as Item);
 
     match input {
@@ -105,7 +104,7 @@ pub fn command(_args: ProcTokenStream, input: ProcTokenStream) -> ProcTokenStrea
                 }
             );
 
-            let full = quote!(
+            quote!(
                 #(#attrs)*
                 #vis
                 #constness
@@ -118,11 +117,7 @@ pub fn command(_args: ProcTokenStream, input: ProcTokenStream) -> ProcTokenStrea
                 #field_frag
                 #impl_command_frag
                 #commands_trait_frag
-            );
-
-            println!("{full}");
-
-            full
+            )
         }
         _ => panic!("unsupported item"),
     }.into()
