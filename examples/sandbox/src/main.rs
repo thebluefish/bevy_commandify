@@ -1,4 +1,4 @@
-use bevy_derive_commands::*;
+use bevy_commandify::*;
 use bevy::prelude::*;
 
 fn main() {

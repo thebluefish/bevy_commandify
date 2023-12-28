@@ -1,13 +1,20 @@
+[workspace]
+resolver = "2"
+members = [
+    ".",
+    "examples/sandbox"
+]
+
 [package]
-name = "bevy_derive_commands"
+name = "bevy_commandify"
 description = "A macro for creating bevy Commands methods"
-version = "0.1.2"
+version = "0.1.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/thebluefish/bevy_derive_commands"
+repository = "https://github.com/thebluefish/bevy_commandify"
 
 [lib]
-name = "bevy_derive_commands"
+name = "bevy_commandify"
 proc-macro = true
 
 [features]
@@ -18,3 +25,8 @@ syn = { version = "2.0", features = ["full", "parsing", "printing", "extra-trait
 quote = "1.0"
 proc-macro2 = "1.0"
 Inflector = "0.11"
+
+[dev-dependencies]
+trybuild = "1.0"
+bevy = "0.12"
+bevy_ecs = "0.12"
