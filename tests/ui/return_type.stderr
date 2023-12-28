@@ -1,0 +1,5 @@
+error: command cannot define a return type
+ --> tests/ui/return_type.rs:4:30
+  |
+4 | fn foo(world: &mut World) -> usize { }
+  |                              ^^^^^

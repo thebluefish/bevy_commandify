@@ -1,0 +1,5 @@
+error[E0599]: no method named `foo` found for struct `bevy::prelude::Commands` in the current scope
+  --> tests/ui/no_trait.rs:15:14
+   |
+15 |     commands.foo();
+   |              ^^^ method not found in `Commands<'_, '_>`

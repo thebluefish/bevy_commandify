@@ -4,5 +4,5 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-bevy_derive_commands = { path = "../.." }
+bevy_commandify = { path = "../.." }
 bevy = "0.12"
