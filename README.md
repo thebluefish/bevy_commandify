@@ -12,7 +12,8 @@ use bevy_commandify::*;
 fn foo(world: &mut World) {
     // Bear in mind that Commands *defer* work
     // This function will not be called immediately
-    // It will be executed either at the end of the current schedule or when `apply_deferred` is next called within the current schedule
+    // It will be executed at the end of the current schedule 
+    // Or when `apply_deferred` is next called within the current schedule
 }
 
 fn setup(mut commands: Commands) {
