@@ -26,7 +26,6 @@ fn setup(mut commands: Commands) {
     // Add the command as a struct
     commands.add(FooCommand { n: 10 });
 }
-
 ```
 
 See also [the example](/examples/sandbox/src/main.rs) and [tests](/tests)
