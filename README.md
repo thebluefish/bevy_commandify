@@ -9,20 +9,22 @@ Derive macro for creating bevy `Commands` methods from functions.
 use bevy_commandify::*;
 
 #[command]
-fn foo(world: &mut World) {
+fn foo(world: &mut World, n: usize) {
     // Bear in mind that Commands *defer* work
     // This function will not be called immediately
     // It will be executed at the end of the current schedule 
     // Or when `apply_deferred` is next called within the current schedule
+    let mut bar = world.resource_mut::<Bar>();
+    **bar -= n;
 }
 
 fn setup(mut commands: Commands) {
     // Fire our command directly
-    commands.foo();
+    commands.foo(10);
     // call it via the generated extension trait
-    CommandsFooExt::foo(&mut commands);
+    CommandsFooExt::foo(&mut commands, 10);
     // Add the command as a struct
-    commands.add(FooCommand);
+    commands.add(FooCommand { n: 10 });
 }
 
 ```
