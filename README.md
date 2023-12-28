@@ -74,6 +74,8 @@ commands.add(FooCommand);
 
 - `#[command(ecs = T)]` or `#[command(bevy_ecs)]` to point the macro to the correct bevy crate if you don't use `bevy` directly
 
+---
+
 ### Compatibility
 
 | Bevy   | Crate |
