@@ -1,0 +1,7 @@
+error: Commands must take in a `&mut World` parameter
+ --> tests/ui/world_param.rs:3:1
+  |
+3 | #[command]
+  | ^^^^^^^^^^
+  |
+  = note: this error originates in the attribute macro `command` (in Nightly builds, run with -Z macro-backtrace for more info)

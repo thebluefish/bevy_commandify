@@ -24,12 +24,36 @@ pub fn command(args: ProcTokenStream, input: ProcTokenStream) -> ProcTokenStream
     let args = parse_macro_input!(args with Punctuated::<Meta, syn::Token![,]>::parse_terminated);
     let item = parse_macro_input!(input as ItemFn);
 
-    commandify(args, item)
+    commandify(args, item, false)
         .unwrap_or_else(Error::into_compile_error)
         .into()
 }
 
-fn commandify(args: Punctuated<Meta, syn::Token![,]>, item: ItemFn) -> Result<TokenStream, Error> {
+/// Promotes a function to an EntityCommand struct, and creates an equivalent EntityCommands method via trait extensions
+///
+/// - `#[entity_command(no_trait)]` prevents generating a trait method for EntityCommands
+/// - `#[entity_command(name = T)]` will use this name for the method and related struct/trait names
+/// - `#[entity_command(struct_name = T)]` will use this name for the generated struct, defaults to `<Foo>EntityCommand`
+/// - `#[entity_command(trait_name = T)]` will use this name for the generated trait, defaults to `EntityCommands<Foo>Ext`
+/// - `#[entity_command(ecs = T)]` to change the crate root to T, defaults to `bevy::ecs`
+/// - `#[entity_command(bevy_ecs)]` to change the crate root to `bevy_ecs`
+///
+/// Note: `T`s may be optionally quoted
+#[proc_macro_attribute]
+pub fn entity_command(args: ProcTokenStream, input: ProcTokenStream) -> ProcTokenStream {
+    let args = parse_macro_input!(args with Punctuated::<Meta, syn::Token![,]>::parse_terminated);
+    let item = parse_macro_input!(input as ItemFn);
+
+    commandify(args, item, true)
+        .unwrap_or_else(Error::into_compile_error)
+        .into()
+}
+
+fn commandify(
+    args: Punctuated<Meta, syn::Token![,]>,
+    item: ItemFn,
+    entity_command: bool,
+) -> Result<TokenStream, Error> {
     let ItemFn {
         attrs,
         vis,
@@ -96,12 +120,17 @@ fn commandify(args: Punctuated<Meta, syn::Token![,]>, item: ItemFn) -> Result<To
     }
 
     // generate default names late so that the `name` field applies
+    let command_struct = if entity_command {
+        "EntityCommand"
+    } else {
+        "Command"
+    };
     let struct_name = struct_name.unwrap_or(Ident::new(
-        &format!("{}Command", name.to_string().to_pascal_case()),
+        &format!("{}{command_struct}", name.to_string().to_pascal_case()),
         name.span(),
     ));
     let trait_name = trait_name.unwrap_or(Ident::new(
-        &format!("Commands{}Ext", name.to_string().to_pascal_case()),
+        &format!("{command_struct}s{}Ext", name.to_string().to_pascal_case()),
         name.span(),
     ));
     let ecs_root = ecs_root.unwrap_or(parse_quote!(::bevy::ecs));
@@ -134,6 +163,7 @@ fn commandify(args: Punctuated<Meta, syn::Token![,]>, item: ItemFn) -> Result<To
     let mut struct_fields = Vec::<TokenStream>::new();
     let mut field_names = Vec::<TokenStream>::new();
     let mut world_field = None;
+    let mut entity_field = None;
     for input in inputs {
         match input {
             // `self` types smell of methods
@@ -142,12 +172,21 @@ fn commandify(args: Punctuated<Meta, syn::Token![,]>, item: ItemFn) -> Result<To
             }
             FnArg::Typed(pt) => {
                 let name = &pt.pat;
-                // find `&World` types
-                if let Type::Reference(tr) = pt.ty.as_ref() {
-                    if tr.elem.to_token_stream().to_string() == "World" {
-                        world_field = Some(quote!(#pt));
-                        continue;
+                // find `&World` and `Entity` types
+                match pt.ty.as_ref() {
+                    Type::Reference(tr) => {
+                        if tr.elem.to_token_stream().to_string() == "World" {
+                            world_field = Some(quote!(#pt));
+                            continue;
+                        }
                     }
+                    Type::Path(path) => {
+                        if entity_command && path.to_token_stream().to_string() == "Entity" {
+                            entity_field = Some(quote!(#pt));
+                            continue;
+                        }
+                    }
+                    _ => (),
                 }
                 fields.push(quote!(#pt ,));
                 struct_fields.push(quote!(pub #pt ,));
@@ -162,6 +201,12 @@ fn commandify(args: Punctuated<Meta, syn::Token![,]>, item: ItemFn) -> Result<To
             "Commands must take in a `&mut World` parameter",
         ));
     }
+    if entity_command && entity_field.is_none() {
+        return Err(Error::new(
+            Span::call_site(),
+            "Entity commands must take in a `Entity` parameter",
+        ));
+    }
 
     let field_frag = if fields.is_empty() {
         quote!( ; )
@@ -169,9 +214,20 @@ fn commandify(args: Punctuated<Meta, syn::Token![,]>, item: ItemFn) -> Result<To
         quote!( { #(#struct_fields)* } )
     };
 
+    let apply_params = if entity_command {
+        quote!((self, #entity_field, #world_field))
+    } else {
+        quote!((self, #world_field))
+    };
+
+    let command_trait = if entity_command {
+        quote!(EntityCommand)
+    } else {
+        quote!(Command)
+    };
     let impl_command_frag = quote!(
-        impl #generics #ecs_root ::system::Command for #struct_name #generic_names {
-            fn apply(self, #world_field) {
+        impl #generics #ecs_root ::system:: #command_trait for #struct_name #generic_names {
+            fn apply #apply_params {
                 let #struct_name {#(#field_names)*} = self;
                 #block
             }
@@ -181,13 +237,18 @@ fn commandify(args: Punctuated<Meta, syn::Token![,]>, item: ItemFn) -> Result<To
     let commands_trait_frag = if no_trait {
         quote!()
     } else {
+        let commands_struct = if entity_command {
+            quote!(EntityCommands<'_, '_, '_>)
+        } else {
+            quote!(Commands<'_, '_>)
+        };
         quote!(
             pub trait #trait_name {
                 #(#attrs)*
                 fn #name #generics (&mut self, #(#fields)*);
             }
 
-            impl #trait_name for #ecs_root ::system::Commands<'_, '_> {
+            impl #trait_name for #ecs_root ::system:: #commands_struct {
                 fn #name #generics (&mut self, #(#fields)*) {
                     self.add(#struct_name {#(#field_names)*});
                 }

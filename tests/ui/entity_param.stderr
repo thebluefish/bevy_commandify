@@ -1,0 +1,7 @@
+error: Entity commands must take in a `Entity` parameter
+ --> tests/ui/entity_param.rs:3:1
+  |
+3 | #[entity_command]
+  | ^^^^^^^^^^^^^^^^^
+  |
+  = note: this error originates in the attribute macro `entity_command` (in Nightly builds, run with -Z macro-backtrace for more info)

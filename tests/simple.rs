@@ -1,5 +1,3 @@
-#![allow(unused_variables)]
-
 use bevy::ecs::system::CommandQueue;
 use bevy::prelude::*;
 use bevy_commandify::*;
@@ -7,13 +5,15 @@ use bevy_commandify::*;
 mod common;
 use common::TestUsize;
 
-#[command(name = "sub")]
+#[command]
+/// Subtracts `n` from the `TestUsize` resource
 fn foo(world: &mut World, n: usize) {
     let mut m = world.resource_mut::<TestUsize>();
     **m -= n;
 }
 
-#[entity_command(name = "bus")]
+#[entity_command]
+/// Subtracts `n` from the entity's `TestUsize`
 fn bar(world: &mut World, entity: Entity, n: usize) {
     let mut m = world
         .query::<&mut TestUsize>()
@@ -22,9 +22,9 @@ fn bar(world: &mut World, entity: Entity, n: usize) {
     **m -= n;
 }
 
-/// The `name` attribute should affect all three ways of calling the command
+/// all three ways of calling the command
 #[test]
-fn foo_becomes_sub() {
+fn command() {
     let mut world = World::new();
     world.insert_resource(TestUsize(20));
 
@@ -32,20 +32,20 @@ fn foo_becomes_sub() {
     let mut commands = Commands::new(&mut queue, &mut world);
 
     // method call on Commands
-    commands.sub(10);
+    commands.foo(10);
     // calling method on trait directly
-    CommandsSubExt::sub(&mut commands, 5);
+    CommandsFooExt::foo(&mut commands, 5);
     // adding command struct
-    commands.add(SubCommand { n: 5 });
+    commands.add(FooCommand { n: 5 });
 
     queue.apply(&mut world);
 
     assert_eq!(**world.resource::<TestUsize>(), 0);
 }
 
-/// The `name` attribute should affect all three ways of calling the entity_command
+/// all three ways of calling the entity_command
 #[test]
-fn bar_becomes_bus() {
+fn entity_command() {
     let mut world = World::new();
     let entity = world.spawn(TestUsize(20)).id();
 
@@ -53,11 +53,11 @@ fn bar_becomes_bus() {
     let mut commands = Commands::new(&mut queue, &mut world);
 
     // method call on Commands
-    commands.entity(entity).bus(10);
+    commands.entity(entity).bar(10);
     // calling method on trait directly
-    EntityCommandsBusExt::bus(&mut commands.entity(entity), 5);
+    EntityCommandsBarExt::bar(&mut commands.entity(entity), 5);
     // adding command struct
-    commands.entity(entity).add(BusEntityCommand { n: 5 });
+    commands.entity(entity).add(BarEntityCommand { n: 5 });
 
     queue.apply(&mut world);
 
