@@ -1,10 +1,13 @@
+use inflector::*;
 use proc_macro::TokenStream as ProcTokenStream;
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::{quote, ToTokens};
-use syn::{parse_macro_input, Error, ItemFn, Signature, ReturnType, FnArg, Type, GenericParam, Path, Meta, MetaNameValue, Expr, ExprLit, Lit, parse_quote};
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
-use inflector::*;
+use syn::{
+    parse_macro_input, parse_quote, Error, Expr, ExprLit, FnArg, GenericParam, ItemFn, Lit, Meta,
+    MetaNameValue, Path, ReturnType, Signature, Type,
+};
 
 /// Promotes a function to a Command struct, and creates an equivalent Commands method via trait extensions
 ///
@@ -26,17 +29,33 @@ pub fn command(args: ProcTokenStream, input: ProcTokenStream) -> ProcTokenStream
         .into()
 }
 
-fn commandify(args: Punctuated::<Meta, syn::Token![,]>, item: ItemFn) -> Result<TokenStream, Error> {
-    let ItemFn { attrs, vis, sig, block } = item;
-    let Signature { constness, asyncness, unsafety, abi, ident, generics, inputs, variadic, output, .. } = sig;
+fn commandify(args: Punctuated<Meta, syn::Token![,]>, item: ItemFn) -> Result<TokenStream, Error> {
+    let ItemFn {
+        attrs,
+        vis,
+        sig,
+        block,
+    } = item;
+    let Signature {
+        constness,
+        asyncness,
+        unsafety,
+        abi,
+        ident,
+        generics,
+        inputs,
+        variadic,
+        output,
+        ..
+    } = sig;
 
     // general guards
     // I actually have no idea if we should care about this case
     if let Some(variadic) = variadic {
-        return Err(Error::new(variadic.span(), "command cannot be variadic"))
+        return Err(Error::new(variadic.span(), "command cannot be variadic"));
     }
     if let ReturnType::Type(_, ty) = output {
-        return Err(Error::new(ty.span(), "command cannot define a return type"))
+        return Err(Error::new(ty.span(), "command cannot define a return type"));
     }
 
     // attributes
@@ -67,13 +86,24 @@ fn commandify(args: Punctuated::<Meta, syn::Token![,]>, item: ItemFn) -> Result<
             Meta::NameValue(MetaNameValue { path, value, .. }) if path.is_ident("ecs") => {
                 ecs_root = Some(expr_to_path(value)?);
             }
-            _ => return Err(Error::new(meta.span(), format!("Unknown attribute `{}`", meta.to_token_stream())))
+            _ => {
+                return Err(Error::new(
+                    meta.span(),
+                    format!("Unknown attribute `{}`", meta.to_token_stream()),
+                ))
+            }
         }
     }
 
     // generate default names late so that the `name` field applies
-    let struct_name = struct_name.unwrap_or(Ident::new(&format!("{}Command", name.to_string().to_pascal_case()), name.span()));
-    let trait_name = trait_name.unwrap_or(Ident::new(&format!("Commands{}Ext", name.to_string().to_pascal_case()), name.span()));
+    let struct_name = struct_name.unwrap_or(Ident::new(
+        &format!("{}Command", name.to_string().to_pascal_case()),
+        name.span(),
+    ));
+    let trait_name = trait_name.unwrap_or(Ident::new(
+        &format!("Commands{}Ext", name.to_string().to_pascal_case()),
+        name.span(),
+    ));
     let ecs_root = ecs_root.unwrap_or(parse_quote!(::bevy::ecs));
 
     let mut generic_names = Vec::<TokenStream>::new();
@@ -96,8 +126,7 @@ fn commandify(args: Punctuated::<Meta, syn::Token![,]>, item: ItemFn) -> Result<
     }
     let generic_names = if generic_names.is_empty() {
         quote!()
-    }
-    else {
+    } else {
         quote!(< #(#generic_names,)* >)
     };
 
@@ -108,14 +137,16 @@ fn commandify(args: Punctuated::<Meta, syn::Token![,]>, item: ItemFn) -> Result<
     for input in inputs {
         match input {
             // `self` types smell of methods
-            FnArg::Receiver(inner) => return Err(Error::new(inner.span(), "Commands cannot be methods")),
+            FnArg::Receiver(inner) => {
+                return Err(Error::new(inner.span(), "Commands cannot be methods"))
+            }
             FnArg::Typed(pt) => {
                 let name = &pt.pat;
                 // find `&World` types
                 if let Type::Reference(tr) = pt.ty.as_ref() {
                     if tr.elem.to_token_stream().to_string() == "World" {
                         world_field = Some(quote!(#pt));
-                        continue
+                        continue;
                     }
                 }
                 fields.push(quote!(#pt ,));
@@ -126,13 +157,15 @@ fn commandify(args: Punctuated::<Meta, syn::Token![,]>, item: ItemFn) -> Result<
     }
 
     if world_field.is_none() {
-        return Err(Error::new(Span::call_site(), "Commands must take in a `&mut World` parameter"))
+        return Err(Error::new(
+            Span::call_site(),
+            "Commands must take in a `&mut World` parameter",
+        ));
     }
 
     let field_frag = if fields.is_empty() {
         quote!( ; )
-    }
-    else {
+    } else {
         quote!( { #(#struct_fields)* } )
     };
 
@@ -147,8 +180,7 @@ fn commandify(args: Punctuated::<Meta, syn::Token![,]>, item: ItemFn) -> Result<
 
     let commands_trait_frag = if no_trait {
         quote!()
-    }
-    else {
+    } else {
         quote!(
             pub trait #trait_name {
                 #(#attrs)*
@@ -182,17 +214,24 @@ fn commandify(args: Punctuated::<Meta, syn::Token![,]>, item: ItemFn) -> Result<
 /// Grabs the T as a syn::ident from either `T` or `"T"`
 fn expr_to_ident(expr: Expr) -> Result<Ident, Error> {
     let ident = match expr {
-        Expr::Lit(ExprLit { lit: Lit::Str(lit), ..}) => lit.parse()?,
+        Expr::Lit(ExprLit {
+            lit: Lit::Str(lit), ..
+        }) => lit.parse()?,
         Expr::Path(mut path) => {
             if path.path.segments.len() < 1 {
-                return Err(Error::new(path.span(), "Name must exist"))
+                return Err(Error::new(path.span(), "Name must exist"));
             }
             if path.path.segments.len() > 1 {
-                return Err(Error::new(path.span(), "Name must be an ident, found path"))
+                return Err(Error::new(path.span(), "Name must be an ident, found path"));
             }
             path.path.segments.pop().unwrap().into_value().ident
         }
-        value => return Err(Error::new(value.span(), format!("invalid name: `{}`", value.to_token_stream())))
+        value => {
+            return Err(Error::new(
+                value.span(),
+                format!("invalid name: `{}`", value.to_token_stream()),
+            ))
+        }
     };
     Ok(ident)
 }
@@ -200,11 +239,16 @@ fn expr_to_ident(expr: Expr) -> Result<Ident, Error> {
 /// Grabs the T as a syn::Path from either `T` or `"T"`
 fn expr_to_path(expr: Expr) -> Result<Path, Error> {
     let path = match expr {
-        Expr::Lit(ExprLit { lit: Lit::Str(lit), ..}) => lit.parse_with(Path::parse_mod_style)?,
-        Expr::Path(path) => {
-            path.path
+        Expr::Lit(ExprLit {
+            lit: Lit::Str(lit), ..
+        }) => lit.parse_with(Path::parse_mod_style)?,
+        Expr::Path(path) => path.path,
+        value => {
+            return Err(Error::new(
+                value.span(),
+                format!("invalid path: `{}`", value.to_token_stream()),
+            ))
         }
-        value => return Err(Error::new(value.span(), format!("invalid path: `{}`", value.to_token_stream())))
     };
     Ok(path)
 }
