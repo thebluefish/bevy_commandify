@@ -26,7 +26,7 @@ fn bar(world: &mut World, entity: Entity, n: usize) {
 #[test]
 fn foo_becomes_sub() {
     let mut world = World::new();
-    world.insert_resource(TestUsize(20));
+    world.insert_resource(TestUsize(30));
 
     let mut queue = CommandQueue::default();
     let mut commands = Commands::new(&mut queue, &mut world);
@@ -40,6 +40,11 @@ fn foo_becomes_sub() {
 
     queue.apply(&mut world);
 
+    // method call on World
+    world.sub(5);
+    // calling method on trait directly
+    CommandsSubExt::sub(&mut world, 5);
+
     assert_eq!(**world.resource::<TestUsize>(), 0);
 }
 
@@ -47,7 +52,7 @@ fn foo_becomes_sub() {
 #[test]
 fn bar_becomes_bus() {
     let mut world = World::new();
-    let entity = world.spawn(TestUsize(20)).id();
+    let entity = world.spawn(TestUsize(30)).id();
 
     let mut queue = CommandQueue::default();
     let mut commands = Commands::new(&mut queue, &mut world);
@@ -60,6 +65,13 @@ fn bar_becomes_bus() {
     commands.entity(entity).add(BusEntityCommand { n: 5 });
 
     queue.apply(&mut world);
+
+    let mut world_entity = world.entity_mut(entity);
+
+    // method call on EntityWorldMut
+    world_entity.bus(5);
+    // calling method on trait directly
+    EntityCommandsBusExt::bus(&mut world_entity, 5);
 
     assert_eq!(**world.query::<&TestUsize>().single(&world), 0);
 }

@@ -19,8 +19,13 @@ fn ecs_name() {
     let mut queue = CommandQueue::default();
     let mut commands = Commands::new(&mut queue, &mut world);
 
+    // Call via Commands
     commands.foo();
     commands.spawn_empty().bar();
+
+    // Call via World
+    world.foo();
+    world.spawn_empty().bar();
 
     queue.apply(&mut world);
 }

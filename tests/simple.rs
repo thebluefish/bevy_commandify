@@ -26,7 +26,7 @@ fn bar(world: &mut World, entity: Entity, n: usize) {
 #[test]
 fn command() {
     let mut world = World::new();
-    world.insert_resource(TestUsize(20));
+    world.insert_resource(TestUsize(30));
 
     let mut queue = CommandQueue::default();
     let mut commands = Commands::new(&mut queue, &mut world);
@@ -40,6 +40,11 @@ fn command() {
 
     queue.apply(&mut world);
 
+    // method call on World
+    world.foo(5);
+    // calling method on trait directly
+    CommandsFooExt::foo(&mut world, 5);
+
     assert_eq!(**world.resource::<TestUsize>(), 0);
 }
 
@@ -47,7 +52,7 @@ fn command() {
 #[test]
 fn entity_command() {
     let mut world = World::new();
-    let entity = world.spawn(TestUsize(20)).id();
+    let entity = world.spawn(TestUsize(30)).id();
 
     let mut queue = CommandQueue::default();
     let mut commands = Commands::new(&mut queue, &mut world);
@@ -60,6 +65,13 @@ fn entity_command() {
     commands.entity(entity).add(BarEntityCommand { n: 5 });
 
     queue.apply(&mut world);
+
+    let mut world_entity = world.entity_mut(entity);
+
+    // method call on EntityWorldMut
+    world_entity.bar(5);
+    // calling method on trait directly
+    EntityCommandsBarExt::bar(&mut world_entity, 5);
 
     assert_eq!(**world.query::<&TestUsize>().single(&world), 0);
 }

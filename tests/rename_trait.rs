@@ -29,26 +29,38 @@ fn renamed_trait() {
     let mut queue = CommandQueue::default();
     let mut commands = Commands::new(&mut queue, &mut world);
 
+    // Call via Commands
     FooExt::add(&mut commands, 10);
 
     queue.apply(&mut world);
 
-    assert_eq!(**world.resource::<TestUsize>(), 20);
+    // Call via World
+    FooExt::add(&mut world, 10);
+
+    assert_eq!(**world.resource::<TestUsize>(), 30);
 }
 
 /// We should be able to call our entity_command via the defined `trait_name`
 #[test]
 fn renamed_entity_trait() {
     let mut world = World::new();
-    let entity = world.spawn(TestUsize(20)).id();
+    let entity = world.spawn(TestUsize(30)).id();
 
     let mut queue = CommandQueue::default();
     let mut commands = Commands::new(&mut queue, &mut world);
 
+    // Call via Commands
     BarExt::do_sub(&mut commands.entity(entity), 10);
     commands.entity(entity).do_sub(10);
 
     queue.apply(&mut world);
+
+    let mut world_entity = world.entity_mut(entity);
+
+    // Call via World
+    BarExt::do_sub(&mut world_entity, 5);
+    world_entity.do_sub(5);
+
 
     assert_eq!(**world.query::<&TestUsize>().single(&world), 0);
 }

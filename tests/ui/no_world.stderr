@@ -1,0 +1,13 @@
+error[E0599]: no method named `foo` found for struct `bevy::prelude::World` in the current scope
+  --> tests/ui/no_world.rs:18:11
+   |
+18 |     world.foo();
+   |           ^^^ method not found in `World`
+   |
+   = help: items from traits can only be used if the trait is implemented and in scope
+note: `CommandsFooExt` defines an item `foo`, perhaps you need to implement it
+  --> tests/ui/no_world.rs:5:1
+   |
+5  | #[command(no_world)]
+   | ^^^^^^^^^^^^^^^^^^^^
+   = note: this error originates in the attribute macro `command` (in Nightly builds, run with -Z macro-backtrace for more info)

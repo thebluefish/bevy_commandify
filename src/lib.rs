@@ -9,9 +9,10 @@ use syn::{
     MetaNameValue, Path, ReturnType, Signature, Type,
 };
 
-/// Promotes a function to a Command struct, and creates an equivalent Commands method via trait extensions
+/// Promotes a function to a `Command` struct, and creates an equivalent `Commands` and `World` method via trait extensions
 ///
-/// - `#[command(no_trait)]` prevents generating a trait method for Commands
+/// - `#[command(no_trait)]` prevents generating a trait method for `Commands`
+/// - `#[command(no_world)]` prevents generating a trait impl for `World`
 /// - `#[command(name = T)]` will use this name for the method and related struct/trait names
 /// - `#[command(struct_name = T)]` will use this name for the generated struct, defaults to `<Foo>Command`
 /// - `#[command(trait_name = T)]` will use this name for the generated trait, defaults to `Commands<Foo>Ext`
@@ -84,6 +85,7 @@ fn commandify(
 
     // attributes
     let mut no_trait = false;
+    let mut no_world = false;
     let mut name = ident;
     let mut struct_name = None;
     let mut trait_name = None;
@@ -94,6 +96,9 @@ fn commandify(
         match meta {
             Meta::Path(path) if path.is_ident("no_trait") => {
                 no_trait = true;
+            }
+            Meta::Path(path) if path.is_ident("no_world") => {
+                no_world = true;
             }
             Meta::Path(path) if path.is_ident("bevy_ecs") => {
                 ecs_root = Some(parse_quote!(::bevy_ecs));
@@ -256,6 +261,29 @@ fn commandify(
         )
     };
 
+    let impl_world_frag = if no_trait || no_world {
+        quote!()
+    } else if entity_command {
+        quote!(
+            impl #trait_name for #ecs_root ::world::EntityWorldMut<'_> {
+                fn #name #generics (&mut self, #(#fields)*) {
+                    let id = self.id();
+                    self.world_scope(|world| {
+                        <#struct_name #generic_names as #ecs_root ::system:: #command_trait>::apply (#struct_name {#(#field_names)*}, id, world);
+                    })
+                }
+            }
+        )
+    } else {
+        quote!(
+            impl #trait_name for #ecs_root ::world::World {
+                fn #name #generics (&mut self, #(#fields)*) {
+                    <#struct_name #generic_names as #ecs_root ::system:: #command_trait>::apply (#struct_name {#(#field_names)*}, self);
+                }
+            }
+        )
+    };
+
     Ok(quote!(
         #(#attrs)*
         #vis
@@ -269,6 +297,7 @@ fn commandify(
         #field_frag
         #impl_command_frag
         #commands_trait_frag
+        #impl_world_frag
     ))
 }
 

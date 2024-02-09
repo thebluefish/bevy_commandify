@@ -29,6 +29,7 @@ fn renamed_struct() {
     let mut queue = CommandQueue::default();
     let mut commands = Commands::new(&mut queue, &mut world);
 
+    // Call via Commands
     commands.add(Foo { n: 10 });
 
     queue.apply(&mut world);
