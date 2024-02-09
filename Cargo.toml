@@ -1,10 +1,3 @@
-[workspace]
-resolver = "2"
-members = [
-    ".",
-    "examples/sandbox"
-]
-
 [package]
 name = "bevy_commandify"
 description = "A macro for creating bevy Commands methods"
