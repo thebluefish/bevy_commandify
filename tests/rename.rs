@@ -1,6 +1,6 @@
-use bevy_commandify::*;
-use bevy::prelude::*;
 use bevy::ecs::system::CommandQueue;
+use bevy::prelude::*;
+use bevy_commandify::*;
 
 mod common;
 use common::TestUsize;

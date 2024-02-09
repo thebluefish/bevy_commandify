@@ -1,5 +1,5 @@
-use bevy_commandify::*;
 use bevy::prelude::*;
+use bevy_commandify::*;
 
 fn main() {
     App::new()
@@ -8,7 +8,10 @@ fn main() {
 }
 
 fn setup(mut commands: Commands) {
-    commands.add(CreateStuffCommand { bundle: TransformBundle::default(), n: 3 });
+    commands.add(CreateStuffCommand {
+        bundle: TransformBundle::default(),
+        n: 3,
+    });
     commands.create_stuff(TransformBundle::default(), 3);
 }
 

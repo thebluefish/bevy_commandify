@@ -1,9 +1,9 @@
-use bevy_commandify::*;
-use bevy::prelude::*;
 use bevy::ecs::system::CommandQueue;
+use bevy::prelude::*;
+use bevy_commandify::*;
 
 #[command(no_trait)]
-fn foo(_world: &mut World) { }
+fn foo(_world: &mut World) {}
 
 #[test]
 fn struct_command_still_works() {
