@@ -1,5 +1,3 @@
-#![allow(unused_variables)]
-
 use bevy::ecs::system::CommandQueue;
 use bevy::prelude::*;
 use bevy_commandify::*;

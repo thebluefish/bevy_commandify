@@ -1,13 +1,6 @@
-[workspace]
-resolver = "2"
-members = [
-    ".",
-    "examples/sandbox"
-]
-
 [package]
 name = "bevy_commandify"
-description = "A macro for creating bevy Commands methods"
+description = "A macro for creating bevy commands"
 version = "0.1.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
