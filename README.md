@@ -1,7 +1,7 @@
 [![Crates.io](https://img.shields.io/crates/v/bevy_commandify.svg)](https://crates.io/crates/bevy_commandify)
 [![Docs](https://docs.rs/bevy_commandify/badge.svg)](https://docs.rs/bevy_commandify/latest/bevy_commandify/)
 
-Derive macro for creating bevy `Commands` methods from functions.
+A macro for creating bevy `Commands` and `EntityCommands` methods from functions.
 
 ## Example
 

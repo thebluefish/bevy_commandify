@@ -1,7 +1,7 @@
 use inflector::*;
 use proc_macro::TokenStream as ProcTokenStream;
 use proc_macro2::{Ident, Span, TokenStream};
-use quote::{quote, quote_spanned, ToTokens};
+use quote::{quote, ToTokens};
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
 use syn::{
@@ -81,13 +81,11 @@ fn commandify(
         return Err(Error::new(variadic.span(), "command cannot be variadic"));
     }
 
-    let return_type = match &output {
+    let do_return = match &output {
         ReturnType::Type(_, ty) => match ty.as_ref() {
+            // find optional `&mut Self` return type
             Type::Reference(tr)
-                if tr.mutability.is_some() && tr.elem.to_token_stream().to_string() == "Self" =>
-            {
-                Some(tr)
-            }
+                if tr.mutability.is_some() && tr.elem.to_token_stream().to_string() == "Self" => true,
             _ => {
                 return Err(Error::new(
                     ty.span(),
@@ -95,7 +93,7 @@ fn commandify(
                 ))
             }
         },
-        _ => None,
+        _ => false,
     };
 
     // attributes
@@ -228,14 +226,8 @@ fn commandify(
         ));
     }
 
-    let output_frag = if let Some(return_type) = &return_type {
-        quote_spanned!(output.span()=> -> #return_type)
-    } else {
-        quote!()
-    };
-
-    let return_frag = if return_type.is_some() {
-        quote!(return self)
+    let return_frag = if do_return {
+        quote!(self)
     } else {
         quote!()
     };
@@ -277,11 +269,11 @@ fn commandify(
         quote!(
             pub trait #trait_name {
                 #(#attrs)*
-                fn #name #generics (&mut self, #(#fields)*) #output_frag;
+                fn #name #generics (&mut self, #(#fields)*) #output;
             }
 
             impl #trait_name for #ecs_root ::system:: #commands_struct {
-                fn #name #generics (&mut self, #(#fields)*) #output_frag {
+                fn #name #generics (&mut self, #(#fields)*) #output {
                     self.add(#struct_name {#(#field_names)*});
                     #return_frag
                 }
@@ -294,7 +286,7 @@ fn commandify(
     } else if entity_command {
         quote!(
             impl #trait_name for #ecs_root ::world::EntityWorldMut<'_> {
-                fn #name #generics (&mut self, #(#fields)*) #output_frag {
+                fn #name #generics (&mut self, #(#fields)*) #output {
                     let id = self.id();
                     self.world_scope(|world| {
                         <#struct_name #generic_names as #ecs_root ::system:: #command_trait>::apply (#struct_name {#(#field_names)*}, id, world);
@@ -306,7 +298,7 @@ fn commandify(
     } else {
         quote!(
             impl #trait_name for #ecs_root ::world::World {
-                fn #name #generics (&mut self, #(#fields)*)  #output_frag {
+                fn #name #generics (&mut self, #(#fields)*)  #output {
                     <#struct_name #generic_names as #ecs_root ::system:: #command_trait>::apply (#struct_name {#(#field_names)*}, self);
                     #return_frag
                 }
