@@ -61,6 +61,5 @@ fn renamed_entity_trait() {
     BarExt::do_sub(&mut world_entity, 5);
     world_entity.do_sub(5);
 
-
     assert_eq!(**world.query::<&TestUsize>().single(&world), 0);
 }

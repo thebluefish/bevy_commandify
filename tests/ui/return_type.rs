@@ -1,6 +1,6 @@
 use bevy_commandify::*;
 
-#[command(fail)]
+#[command]
 fn foo(world: &mut World) -> usize { }
 
 fn main() { }
