@@ -45,6 +45,7 @@ fn exclusive_commands(world: &mut World) {
 
 fn entity_commands(mut commands: Commands) {
     let entity = commands.spawn(Bar::default()).id();
+    
     commands.entity(entity).bar(10).insert(Foo); // We can chain calls to other commands
     EntityCommandsBarExt::bar(&mut commands.entity(entity), 10);
     commands.entity(entity).add(BarEntityCommand { n: 10 });
@@ -52,6 +53,7 @@ fn entity_commands(mut commands: Commands) {
 
 fn exclusive_entity_commands(world: &mut World) {
     let entity = world.spawn(Bar(0)).id();
+    
     world.entity_mut(entity).bar(10);
     EntityCommandsBarExt::bar(&mut world.entity_mut(entity), 10);
 }
