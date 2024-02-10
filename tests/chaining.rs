@@ -62,3 +62,30 @@ fn chain_entity_commands() {
 
     assert_eq!(**world.query::<&TestUsize>().single(&world), 0);
 }
+
+/// Test that we can spawn an entity, run our command on it, and chain other commands afterwards
+#[test]
+fn spawn_chain_commands() {
+    let mut world = World::new();
+
+    let mut queue = CommandQueue::default();
+    let mut commands = Commands::new(&mut queue, &mut world);
+
+    // The operation effectively does nothing since we replace it right after
+    commands.spawn(TestUsize(10)).bar(5).insert(TestUsize(100));
+
+    queue.apply(&mut world);
+
+    assert_eq!(**world.query::<&TestUsize>().single(&world), 100);
+}
+
+/// Test that we can spawn an entity against the world and chain other commands afterwards
+#[test]
+fn spawn_chain_world() {
+    let mut world = World::new();
+
+    // The operation effectively does nothing since we replace it right after
+    world.spawn(TestUsize(10)).bar(5).insert(TestUsize(100));
+
+    assert_eq!(**world.query::<&TestUsize>().single(&world), 100);
+}
