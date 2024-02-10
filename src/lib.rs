@@ -82,12 +82,19 @@ fn commandify(
     }
 
     let return_type = match &output {
-        ReturnType::Type(_, ty) => {
-            match ty.as_ref() {
-                Type::Reference(tr) if tr.mutability.is_some() && tr.elem.to_token_stream().to_string() == "Self" => Some(tr),
-                _ => return Err(Error::new(ty.span(),"command may not define a return type, except for `&mut Self`")),
+        ReturnType::Type(_, ty) => match ty.as_ref() {
+            Type::Reference(tr)
+                if tr.mutability.is_some() && tr.elem.to_token_stream().to_string() == "Self" =>
+            {
+                Some(tr)
             }
-        }
+            _ => {
+                return Err(Error::new(
+                    ty.span(),
+                    "command may not define a return type, except for `&mut Self`",
+                ))
+            }
+        },
         _ => None,
     };
 
@@ -223,15 +230,13 @@ fn commandify(
 
     let output_frag = if let Some(return_type) = &return_type {
         quote_spanned!(output.span()=> -> #return_type)
-    }
-    else {
+    } else {
         quote!()
     };
 
     let return_frag = if return_type.is_some() {
         quote!(return self)
-    }
-    else {
+    } else {
         quote!()
     };
 
