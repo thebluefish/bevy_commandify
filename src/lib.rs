@@ -85,7 +85,10 @@ fn commandify(
         ReturnType::Type(_, ty) => match ty.as_ref() {
             // find optional `&mut Self` return type
             Type::Reference(tr)
-                if tr.mutability.is_some() && tr.elem.to_token_stream().to_string() == "Self" => true,
+                if tr.mutability.is_some() && tr.elem.to_token_stream().to_string() == "Self" =>
+            {
+                true
+            }
             _ => {
                 return Err(Error::new(
                     ty.span(),
@@ -226,11 +229,7 @@ fn commandify(
         ));
     }
 
-    let return_frag = if do_return {
-        quote!(self)
-    } else {
-        quote!()
-    };
+    let return_frag = if do_return { quote!(self) } else { quote!() };
 
     let field_frag = if fields.is_empty() {
         quote!( ; )
