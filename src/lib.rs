@@ -42,6 +42,8 @@ pub fn command(args: ProcTokenStream, input: ProcTokenStream) -> ProcTokenStream
 /// - `#[entity_command(bevy_ecs)]` to change the crate root to `bevy_ecs`
 ///
 /// Note: `T`s may be optionally quoted
+///
+/// Commands may optionally return `&mut Self` to allow chaining their calls
 #[proc_macro_attribute]
 pub fn entity_command(args: ProcTokenStream, input: ProcTokenStream) -> ProcTokenStream {
     let args = parse_macro_input!(args with Punctuated::<Meta, syn::Token![,]>::parse_terminated);
