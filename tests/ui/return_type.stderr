@@ -1,4 +1,4 @@
-error: command cannot define a return type
+error: command may not define a return type, except for `&mut Self`
  --> tests/ui/return_type.rs:4:30
   |
 4 | fn foo(world: &mut World) -> usize { }
