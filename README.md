@@ -18,6 +18,12 @@ fn foo(world: &mut World, n: usize) {
     **bar -= n;
 }
 
+/// Regular bevy systems can be used as commands, too
+#[command]
+fn irony(mut commands: Commands) {
+    commands.foo(5);
+}
+
 #[entity_command]
 /// Commands may optionally return `&mut Self` to allow chaining command calls
 fn bar(world: &mut World, entity: Entity, n: usize) -> &mut Self {

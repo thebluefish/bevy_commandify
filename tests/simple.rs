@@ -6,15 +6,16 @@ mod common;
 use common::TestUsize;
 
 #[command]
-/// Subtracts `n` from the `TestUsize` resource
-fn foo(world: &mut World, n: usize) {
+fn foo(world: &mut World, mut n: usize) {
+    n *= 2;
     let mut m = world.resource_mut::<TestUsize>();
     **m -= n;
 }
 
 #[entity_command]
 /// Subtracts `n` from the entity's `TestUsize`
-fn bar(world: &mut World, entity: Entity, n: usize) {
+fn bar(world: &mut World, entity: Entity, mut n: usize) {
+    n *= 2;
     let mut m = world
         .query::<&mut TestUsize>()
         .get_mut(world, entity)
@@ -26,13 +27,13 @@ fn bar(world: &mut World, entity: Entity, n: usize) {
 #[test]
 fn command() {
     let mut world = World::new();
-    world.insert_resource(TestUsize(30));
+    world.insert_resource(TestUsize(50));
 
     let mut queue = CommandQueue::default();
     let mut commands = Commands::new(&mut queue, &mut world);
 
     // method call on Commands
-    commands.foo(10);
+    commands.foo(5);
     // calling method on trait directly
     CommandsFooExt::foo(&mut commands, 5);
     // adding command struct
@@ -52,13 +53,13 @@ fn command() {
 #[test]
 fn entity_command() {
     let mut world = World::new();
-    let entity = world.spawn(TestUsize(30)).id();
+    let entity = world.spawn(TestUsize(50)).id();
 
     let mut queue = CommandQueue::default();
     let mut commands = Commands::new(&mut queue, &mut world);
 
     // method call on Commands
-    commands.entity(entity).bar(10);
+    commands.entity(entity).bar(5);
     // calling method on trait directly
     EntityCommandsBarExt::bar(&mut commands.entity(entity), 5);
     // adding command struct
