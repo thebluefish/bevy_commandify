@@ -1,15 +1,15 @@
-use crate::parse::ExprExt;
+use crate::parse::{SysArgs, SystemArgs};
+use crate::{parse, parse::ExprExt};
 use inflector::*;
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::{quote, ToTokens};
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
 use syn::{
-    parse_quote, Error, FnArg, GenericParam, ItemFn, Meta, MetaNameValue, ReturnType, Signature,
-    Type,
+    parse_quote, Error, GenericParam, ItemFn, Meta, MetaNameValue, ReturnType, Signature, Type,
 };
 
-pub(crate) fn commandify(
+pub fn commandify(
     args: Punctuated<Meta, syn::Token![,]>,
     item: ItemFn,
     entity_command: bool,
@@ -19,7 +19,7 @@ pub(crate) fn commandify(
         vis,
         sig,
         block,
-    } = item;
+    } = item.clone();
     let Signature {
         constness,
         asyncness,
@@ -38,6 +38,8 @@ pub(crate) fn commandify(
         return Err(Error::new(variadic.span(), "command cannot be variadic"));
     }
 
+    // parse return argument
+    // todo: move this to the `parse` module
     let do_return = match &output {
         ReturnType::Type(_, ty) => match ty.as_ref() {
             // find optional `&mut Self` return type
@@ -56,15 +58,15 @@ pub(crate) fn commandify(
         _ => false,
     };
 
-    // attributes
+    // arguments
     let mut no_trait = false;
     let mut no_world = false;
-    let mut name = ident;
+    let mut name = ident.clone();
     let mut struct_name = None;
     let mut trait_name = None;
     let mut ecs_root = None;
 
-    // parse attributes
+    // parse macro arguments
     for meta in args {
         match meta {
             Meta::Path(path) if path.is_ident("no_trait") => {
@@ -113,6 +115,7 @@ pub(crate) fn commandify(
     ));
     let ecs_root = ecs_root.unwrap_or(parse_quote!(::bevy::ecs));
 
+    // parse generics
     let mut generic_names = Vec::<TokenStream>::new();
     for param in &generics.params {
         let name = match param {
@@ -137,67 +140,67 @@ pub(crate) fn commandify(
         quote!(< #(#generic_names,)* >)
     };
 
-    let mut fields = Vec::<TokenStream>::new();
-    let mut struct_fields = Vec::<TokenStream>::new();
-    let mut field_names = Vec::<TokenStream>::new();
-    let mut world_field = None;
-    let mut entity_field = None;
-    for input in inputs {
-        match input {
-            // `self` types smell of methods
-            FnArg::Receiver(inner) => {
-                return Err(Error::new(inner.span(), "Commands cannot be methods"))
-            }
-            FnArg::Typed(pt) => {
-                let name = &pt.pat;
-                // find `&World` and `Entity` types
-                match pt.ty.as_ref() {
-                    Type::Reference(tr) => {
-                        if tr.elem.to_token_stream().to_string() == "World" {
-                            world_field = Some(quote!(#pt));
-                            continue;
-                        }
-                    }
-                    Type::Path(path) => {
-                        if entity_command && path.to_token_stream().to_string() == "Entity" {
-                            entity_field = Some(quote!(#pt));
-                            continue;
-                        }
-                    }
-                    _ => (),
-                }
-                fields.push(quote!(#pt ,));
-                struct_fields.push(quote!(pub #pt ,));
-                field_names.push(quote!(#name ,));
-            }
-        }
-    }
+    // parse doc comments
+    let docs = parse::docs(&attrs);
 
-    if world_field.is_none() {
-        return Err(Error::new(
-            Span::call_site(),
-            "Commands must take in a `&mut World` parameter",
-        ));
-    }
-    if entity_command && entity_field.is_none() {
+    // parse fn args
+    let SysArgs {
+        entity,
+        fields,
+        def_field_names,
+        impl_field_names,
+        args,
+    } = parse::fn_args(inputs, entity_command)?;
+
+    if entity_command && entity.is_none() {
         return Err(Error::new(
             Span::call_site(),
             "Entity commands must take in a `Entity` parameter",
         ));
     }
 
-    let return_frag = if do_return { quote!(self) } else { quote!() };
+    // generate fragments to be combined later
 
-    let field_frag = if fields.is_empty() {
-        quote!( ; )
-    } else {
-        quote!( { #(#struct_fields)* } )
-    };
-
-    let apply_params = if entity_command {
-        quote!((self, #entity_field, #world_field))
-    } else {
-        quote!((self, #world_field))
+    // break apart the function and piece it back together sans return type
+    // since we handle that specially above
+    let fn_frag = match &args {
+        SystemArgs::Exclusive { .. } => {
+            quote!()
+        }
+        SystemArgs::System { .. } => {
+            let ItemFn {
+                attrs,
+                vis,
+                sig,
+                block,
+            } = item;
+            let Signature {
+                constness,
+                asyncness,
+                unsafety,
+                abi,
+                fn_token,
+                ident,
+                generics,
+                inputs,
+                variadic,
+                ..
+            } = sig;
+            quote!(
+                #(#attrs)*
+                #vis
+                #constness
+                #asyncness
+                #unsafety
+                #abi
+                #fn_token
+                #ident
+                #generics
+                (#inputs)
+                #variadic
+                #block
+            )
+        }
     };
 
     let command_trait = if entity_command {
@@ -205,64 +208,205 @@ pub(crate) fn commandify(
     } else {
         quote!(Command)
     };
-    let impl_command_frag = quote!(
-        impl #generics #ecs_root ::system:: #command_trait for #struct_name #generic_names {
-            fn apply #apply_params {
-                let #struct_name {#(#field_names)*} = self;
-                #block
-            }
-        }
-    );
 
-    let commands_trait_frag = if no_trait {
-        quote!()
+    let return_frag = if do_return { quote!(self) } else { quote!() };
+
+    let field_frag = if fields.is_empty() {
+        quote!( ; )
     } else {
-        let commands_struct = if entity_command {
-            quote!(EntityCommands<'_, '_, '_>)
-        } else {
-            quote!(Commands<'_, '_>)
-        };
-        quote!(
-            pub trait #trait_name {
-                #(#attrs)*
-                fn #name #generics (&mut self, #(#fields)*) #output;
-            }
-
-            impl #trait_name for #ecs_root ::system:: #commands_struct {
-                fn #name #generics (&mut self, #(#fields)*) #output {
-                    self.add(#struct_name {#(#field_names)*});
-                    #return_frag
-                }
-            }
-        )
+        quote!( { #(pub #fields,)* } )
     };
 
-    let impl_world_frag = if no_trait || no_world {
-        quote!()
-    } else if entity_command {
-        quote!(
-            impl #trait_name for #ecs_root ::world::EntityWorldMut<'_> {
-                fn #name #generics (&mut self, #(#fields)*) #output {
-                    let id = self.id();
+    let system_in_frag = match &args {
+        SystemArgs::Exclusive { .. } => quote!(),
+        SystemArgs::System { systems_in, .. } => {
+            if systems_in.len() > 1 {
+                quote!((#(#systems_in,)*))
+            } else if let Some(field) = systems_in.last() {
+                quote!(#field)
+            } else {
+                quote!()
+            }
+        }
+    };
+
+    let impl_command_frag = match &args {
+        SystemArgs::Exclusive { world } => {
+            let apply_params = if entity_command {
+                quote!((self, #entity, #world))
+            } else {
+                quote!((self, #world))
+            };
+
+            quote!(
+                impl #generics #ecs_root ::system:: #command_trait for #struct_name #generic_names {
+                    fn apply #apply_params {
+                        let #struct_name {#(#impl_field_names,)*} = self;
+                        #block
+                    }
+                }
+            )
+        }
+        SystemArgs::System { .. } => {
+            let apply_params = if entity_command {
+                quote!((self, #entity, world: &mut #ecs_root ::world::World))
+            } else {
+                quote!((self, world: &mut #ecs_root ::world::World))
+            };
+            if fields.is_empty() {
+                quote!(
+                    impl #generics #ecs_root ::system:: #command_trait for #struct_name #generic_names {
+                        fn apply #apply_params {
+                            use #ecs_root ::system::RunSystemOnce;
+                            world.run_system_once(#ident);
+                        }
+                    }
+                )
+            } else {
+                quote!(
+                    impl #generics #ecs_root ::system:: #command_trait for #struct_name #generic_names {
+                        fn apply #apply_params {
+                            use #ecs_root ::system::RunSystemOnce;
+                            let #struct_name {#(#def_field_names,)*} = self;
+                            world.run_system_once_with(#system_in_frag, #ident);
+                        }
+                    }
+                )
+            }
+        }
+    };
+
+    let commands_trait_frag = match &args {
+        SystemArgs::Exclusive { .. } => {
+            if no_trait {
+                quote!()
+            } else {
+                let commands_struct = if entity_command {
+                    quote!(EntityCommands<'_>)
+                } else {
+                    quote!(Commands<'_, '_>)
+                };
+                quote!(
+                    pub trait #trait_name {
+                        #docs
+                        fn #name #generics (&mut self, #(#fields,)*) #output;
+                    }
+
+                    impl #trait_name for #ecs_root ::system:: #commands_struct {
+                        fn #name #generics (&mut self, #(#fields,)*) #output {
+                            self.add(#struct_name {#(#def_field_names,)*});
+                            #return_frag
+                        }
+                    }
+                )
+            }
+        }
+        SystemArgs::System { .. } => {
+            if no_trait {
+                quote!()
+            } else {
+                let commands_struct = if entity_command {
+                    quote!(EntityCommands<'_>)
+                } else {
+                    quote!(Commands<'_, '_>)
+                };
+
+                quote!(
+                    pub trait #trait_name {
+                        #docs
+                        fn #name #generics (&mut self #(,#fields,)*) #output;
+                    }
+
+                    impl #trait_name for #ecs_root ::system:: #commands_struct {
+                        fn #name #generics (&mut self #(,#fields,)*) #output {
+                            self.add(#struct_name {#(#def_field_names,)*});
+                            #return_frag
+                        }
+                    }
+                )
+            }
+        }
+    };
+
+    let impl_world_frag = match &args {
+        SystemArgs::Exclusive { .. } => {
+            if no_trait || no_world {
+                quote!()
+            } else if entity_command {
+                quote!(
+                    impl #trait_name for #ecs_root ::world::EntityWorldMut<'_> {
+                        fn #name #generics (&mut self, #(#fields,)*) #output {
+                            let id = self.id();
+                            self.world_scope(|world| {
+                                <#struct_name #generic_names as #ecs_root ::system:: #command_trait>::apply (#struct_name {#(#def_field_names,)*}, id, world);
+                            });
+                            #return_frag
+                        }
+                    }
+                )
+            } else {
+                quote!(
+                    impl #trait_name for #ecs_root ::world::World {
+                        fn #name #generics (&mut self, #(#fields,)*) #output {
+                            <#struct_name #generic_names as #ecs_root ::system:: #command_trait>::apply (#struct_name {#(#def_field_names,)*}, self);
+                            #return_frag
+                        }
+                    }
+                )
+            }
+        }
+        SystemArgs::System { entity_name, .. } => {
+            let root = if entity_command {
+                quote!(#ecs_root ::world::EntityWorldMut<'_>)
+            } else {
+                quote!(#ecs_root ::world::World)
+            };
+
+            let entity_frag = if let Some(entity) = entity_name {
+                quote!(let #entity = self.id();)
+            } else {
+                quote!()
+            };
+
+            let run_frag = if entity_command {
+                quote!(
                     self.world_scope(|world| {
-                        <#struct_name #generic_names as #ecs_root ::system:: #command_trait>::apply (#struct_name {#(#field_names)*}, id, world);
+                        world.run_system_once_with(#system_in_frag, #ident);
                     });
-                    #return_frag
-                }
+                )
+            } else {
+                quote!(self.run_system_once_with(#system_in_frag, #ident);)
+            };
+
+            if no_trait || no_world {
+                quote!()
+            } else if fields.is_empty() {
+                quote!(
+                    impl #trait_name for #root {
+                        fn #name #generics (&mut self)  #output {
+                            use ::bevy::ecs::system::RunSystemOnce;
+                            self.run_system_once(#ident);
+                            #return_frag
+                        }
+                    }
+                )
+            } else {
+                quote!(
+                    impl #trait_name for #root {
+                        fn #name #generics (&mut self #(,#fields)*)  #output {
+                            use ::bevy::ecs::system::RunSystemOnce;
+                            #entity_frag
+                            #run_frag
+                            #return_frag
+                        }
+                    }
+                )
             }
-        )
-    } else {
-        quote!(
-            impl #trait_name for #ecs_root ::world::World {
-                fn #name #generics (&mut self, #(#fields)*)  #output {
-                    <#struct_name #generic_names as #ecs_root ::system:: #command_trait>::apply (#struct_name {#(#field_names)*}, self);
-                    #return_frag
-                }
-            }
-        )
+        }
     };
 
     Ok(quote!(
+        #fn_frag
         #(#attrs)*
         #vis
         #constness
