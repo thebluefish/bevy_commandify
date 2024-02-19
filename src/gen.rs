@@ -119,6 +119,7 @@ pub fn commandify(
 
     // piece back the original system sans return type
     let fn_frag = quote!(
+        #[allow(unused)]
         #(#attrs)*
         #vis
         #constness
