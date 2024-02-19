@@ -117,30 +117,23 @@ pub fn commandify(
         quote!(< #(#generic_names,)* >)
     };
 
-    // break apart the function and piece it back together sans return type
-    // since we handle that specially above
-    let fn_frag = match &args {
-        SystemArgs::Exclusive { .. } => {
-            quote!()
-        }
-        SystemArgs::System { .. } => {
-            quote!(
-                #(#attrs)*
-                #vis
-                #constness
-                #asyncness
-                #unsafety
-                #abi
-                #fn_token
-                #ident
-                #generics
-                (#inputs)
-                #variadic
-                #block
-            )
-        }
-    };
+    // piece back the original system sans return type
+    let fn_frag = quote!(
+        #(#attrs)*
+        #vis
+        #constness
+        #asyncness
+        #unsafety
+        #abi
+        #fn_token
+        #ident
+        #generics
+        (#inputs)
+        #variadic
+        #block
+    );
 
+    // which trait we're implementing for
     let command_trait = if entity_command {
         quote!(EntityCommand)
     } else {
@@ -149,12 +142,14 @@ pub fn commandify(
 
     let return_frag = if do_return { quote!(self) } else { quote!() };
 
-    let field_frag = if fields.is_empty() {
+    // the fields of our generated struct
+    let struct_fields_frag = if fields.is_empty() {
         quote!( ; )
     } else {
         quote!( { #(pub #fields,)* } )
     };
 
+    // The inputs passed to our system
     let system_in_frag = match &args {
         SystemArgs::Exclusive { .. } => quote!(),
         SystemArgs::System { systems_in, .. } => {
@@ -168,6 +163,7 @@ pub fn commandify(
         }
     };
 
+    // Generates a `Commands` or `EntityCommands` impl for our struct
     let impl_command_frag = match &args {
         SystemArgs::Exclusive { world } => {
             let apply_params = if entity_command {
@@ -214,6 +210,8 @@ pub fn commandify(
         }
     };
 
+    // Generates a new trait + method for issuing our command
+    // Implements this new trait for `Commands` or `EntityCommands`
     let commands_trait_frag = match &args {
         SystemArgs::Exclusive { .. } => {
             if no_trait {
@@ -266,6 +264,7 @@ pub fn commandify(
         }
     };
 
+    // Implements the same trait as above, but for `World` or `EntityWorldMut`
     let impl_world_frag = match &args {
         SystemArgs::Exclusive { .. } => {
             if no_trait || no_world {
@@ -354,7 +353,7 @@ pub fn commandify(
         struct
         #struct_name
         #generics
-        #field_frag
+        #struct_fields_frag
         #impl_command_frag
         #commands_trait_frag
         #impl_world_frag
