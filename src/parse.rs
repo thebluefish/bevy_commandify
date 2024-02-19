@@ -4,9 +4,70 @@ use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
 use syn::token::Comma;
 use syn::{
-    Attribute, Error, Expr, ExprLit, FnArg, GenericArgument, Lit, Meta, Pat, Path, PathArguments,
-    Type,
+    parse_quote, Attribute, Error, Expr, ExprLit, FnArg, GenericArgument, Lit, Meta, MetaNameValue,
+    Pat, Path, PathArguments, ReturnType, Type,
 };
+
+pub struct MacroArgs {
+    pub no_trait: bool,
+    pub no_world: bool,
+    pub name: Ident,
+    pub struct_name: Option<Ident>,
+    pub trait_name: Option<Ident>,
+    pub ecs_root: Option<Path>,
+}
+
+/// parse macro args
+pub fn macro_args(args: &Punctuated<Meta, Comma>, mut name: Ident) -> Result<MacroArgs, Error> {
+    // arguments
+    let mut no_trait = false;
+    let mut no_world = false;
+    let mut struct_name = None;
+    let mut trait_name = None;
+    let mut ecs_root = None;
+
+    // parse macro arguments
+    for meta in args {
+        match meta {
+            Meta::Path(path) if path.is_ident("no_trait") => {
+                no_trait = true;
+            }
+            Meta::Path(path) if path.is_ident("no_world") => {
+                no_world = true;
+            }
+            Meta::Path(path) if path.is_ident("bevy_ecs") => {
+                ecs_root = Some(parse_quote!(::bevy_ecs));
+            }
+            Meta::NameValue(MetaNameValue { path, value, .. }) if path.is_ident("name") => {
+                name = value.try_to_ident()?;
+            }
+            Meta::NameValue(MetaNameValue { path, value, .. }) if path.is_ident("struct_name") => {
+                struct_name = Some(value.try_to_ident()?);
+            }
+            Meta::NameValue(MetaNameValue { path, value, .. }) if path.is_ident("trait_name") => {
+                trait_name = Some(value.try_to_ident()?);
+            }
+            Meta::NameValue(MetaNameValue { path, value, .. }) if path.is_ident("ecs") => {
+                ecs_root = Some(value.try_to_path()?);
+            }
+            _ => {
+                return Err(Error::new(
+                    meta.span(),
+                    format!("Unknown attribute `{}`", meta.to_token_stream()),
+                ))
+            }
+        }
+    }
+
+    Ok(MacroArgs {
+        no_trait,
+        no_world,
+        name,
+        struct_name,
+        trait_name,
+        ecs_root,
+    })
+}
 
 pub struct SysArgs {
     pub entity: Option<TokenStream>,
@@ -30,7 +91,7 @@ pub enum SystemArgs {
 }
 
 /// parse command args
-pub fn fn_args(inputs: Punctuated<FnArg, Comma>, entity_command: bool) -> Result<SysArgs, Error> {
+pub fn fn_args(inputs: &Punctuated<FnArg, Comma>, entity_command: bool) -> Result<SysArgs, Error> {
     let mut exclusive_fields = Vec::<TokenStream>::new();
     let mut exclusive_def_field_names = Vec::<TokenStream>::new();
     let mut exclusive_impl_field_names = Vec::<TokenStream>::new();
@@ -184,20 +245,18 @@ pub fn fn_args(inputs: Punctuated<FnArg, Comma>, entity_command: bool) -> Result
     }
 
     // figure these out late since some parts have different meanings depending on whether this is an exclusive or normal system
-    let fields = if world_field.is_some() {
-        exclusive_fields
+    let (fields, def_field_names, impl_field_names) = if world_field.is_some() {
+        (
+            exclusive_fields,
+            exclusive_def_field_names,
+            exclusive_impl_field_names,
+        )
     } else {
-        system_fields
-    };
-    let def_field_names = if world_field.is_some() {
-        exclusive_def_field_names
-    } else {
-        system_def_field_names
-    };
-    let impl_field_names = if world_field.is_some() {
-        exclusive_impl_field_names
-    } else {
-        system_impl_field_names
+        (
+            system_fields,
+            system_def_field_names,
+            system_impl_field_names,
+        )
     };
 
     let args = match world_field {
@@ -215,6 +274,29 @@ pub fn fn_args(inputs: Punctuated<FnArg, Comma>, entity_command: bool) -> Result
         impl_field_names,
         args,
     })
+}
+
+/// parse the return type of a function & check whether it's our special marker or not
+pub fn return_type(output: &ReturnType) -> Result<bool, Error> {
+    let ret = match &output {
+        ReturnType::Type(_, ty) => match ty.as_ref() {
+            // find optional `&mut Self` return type
+            Type::Reference(tr)
+                if tr.mutability.is_some() && tr.elem.to_token_stream().to_string() == "Self" =>
+            {
+                true
+            }
+            _ => {
+                return Err(Error::new(
+                    ty.span(),
+                    "command may not define a return type, except for `&mut Self`",
+                ))
+            }
+        },
+        _ => false,
+    };
+
+    Ok(ret)
 }
 
 /// separate out doc comments for our trait method

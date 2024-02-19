@@ -1,13 +1,11 @@
-use crate::parse::{SysArgs, SystemArgs};
-use crate::{parse, parse::ExprExt};
+use crate::parse;
+use crate::parse::{MacroArgs, SysArgs, SystemArgs};
 use inflector::*;
 use proc_macro2::{Ident, Span, TokenStream};
-use quote::{quote, ToTokens};
+use quote::quote;
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
-use syn::{
-    parse_quote, Error, GenericParam, ItemFn, Meta, MetaNameValue, ReturnType, Signature, Type,
-};
+use syn::{parse_quote, Error, GenericParam, ItemFn, Meta, Signature};
 
 pub fn commandify(
     args: Punctuated<Meta, syn::Token![,]>,
@@ -19,12 +17,13 @@ pub fn commandify(
         vis,
         sig,
         block,
-    } = item.clone();
+    } = item;
     let Signature {
         constness,
         asyncness,
         unsafety,
         abi,
+        fn_token,
         ident,
         generics,
         inputs,
@@ -39,65 +38,17 @@ pub fn commandify(
     }
 
     // parse return argument
-    // todo: move this to the `parse` module
-    let do_return = match &output {
-        ReturnType::Type(_, ty) => match ty.as_ref() {
-            // find optional `&mut Self` return type
-            Type::Reference(tr)
-                if tr.mutability.is_some() && tr.elem.to_token_stream().to_string() == "Self" =>
-            {
-                true
-            }
-            _ => {
-                return Err(Error::new(
-                    ty.span(),
-                    "command may not define a return type, except for `&mut Self`",
-                ))
-            }
-        },
-        _ => false,
-    };
+    let do_return = parse::return_type(&output)?;
 
-    // arguments
-    let mut no_trait = false;
-    let mut no_world = false;
-    let mut name = ident.clone();
-    let mut struct_name = None;
-    let mut trait_name = None;
-    let mut ecs_root = None;
-
-    // parse macro arguments
-    for meta in args {
-        match meta {
-            Meta::Path(path) if path.is_ident("no_trait") => {
-                no_trait = true;
-            }
-            Meta::Path(path) if path.is_ident("no_world") => {
-                no_world = true;
-            }
-            Meta::Path(path) if path.is_ident("bevy_ecs") => {
-                ecs_root = Some(parse_quote!(::bevy_ecs));
-            }
-            Meta::NameValue(MetaNameValue { path, value, .. }) if path.is_ident("name") => {
-                name = value.try_to_ident()?;
-            }
-            Meta::NameValue(MetaNameValue { path, value, .. }) if path.is_ident("struct_name") => {
-                struct_name = Some(value.try_to_ident()?);
-            }
-            Meta::NameValue(MetaNameValue { path, value, .. }) if path.is_ident("trait_name") => {
-                trait_name = Some(value.try_to_ident()?);
-            }
-            Meta::NameValue(MetaNameValue { path, value, .. }) if path.is_ident("ecs") => {
-                ecs_root = Some(value.try_to_path()?);
-            }
-            _ => {
-                return Err(Error::new(
-                    meta.span(),
-                    format!("Unknown attribute `{}`", meta.to_token_stream()),
-                ))
-            }
-        }
-    }
+    // parse macro args
+    let MacroArgs {
+        no_trait,
+        no_world,
+        name,
+        struct_name,
+        trait_name,
+        ecs_root,
+    } = parse::macro_args(&args, ident.clone())?;
 
     // generate default names late so that the `name` field applies
     let command_struct = if entity_command {
@@ -105,15 +56,19 @@ pub fn commandify(
     } else {
         "Command"
     };
-    let struct_name = struct_name.unwrap_or(Ident::new(
-        &format!("{}{command_struct}", name.to_string().to_pascal_case()),
-        name.span(),
-    ));
-    let trait_name = trait_name.unwrap_or(Ident::new(
-        &format!("{command_struct}s{}Ext", name.to_string().to_pascal_case()),
-        name.span(),
-    ));
-    let ecs_root = ecs_root.unwrap_or(parse_quote!(::bevy::ecs));
+    let struct_name = struct_name.unwrap_or_else(|| {
+        Ident::new(
+            &format!("{}{command_struct}", name.to_string().to_pascal_case()),
+            name.span(),
+        )
+    });
+    let trait_name = trait_name.unwrap_or_else(|| {
+        Ident::new(
+            &format!("{command_struct}s{}Ext", name.to_string().to_pascal_case()),
+            name.span(),
+        )
+    });
+    let ecs_root = ecs_root.unwrap_or_else(|| parse_quote!(::bevy::ecs));
 
     // parse generics
     let mut generic_names = Vec::<TokenStream>::new();
@@ -134,11 +89,6 @@ pub fn commandify(
         };
         generic_names.push(name);
     }
-    let generic_names = if generic_names.is_empty() {
-        quote!()
-    } else {
-        quote!(< #(#generic_names,)* >)
-    };
 
     // parse doc comments
     let docs = parse::docs(&attrs);
@@ -150,7 +100,7 @@ pub fn commandify(
         def_field_names,
         impl_field_names,
         args,
-    } = parse::fn_args(inputs, entity_command)?;
+    } = parse::fn_args(&inputs, entity_command)?;
 
     if entity_command && entity.is_none() {
         return Err(Error::new(
@@ -161,6 +111,12 @@ pub fn commandify(
 
     // generate fragments to be combined later
 
+    let generic_names = if generic_names.is_empty() {
+        quote!()
+    } else {
+        quote!(< #(#generic_names,)* >)
+    };
+
     // break apart the function and piece it back together sans return type
     // since we handle that specially above
     let fn_frag = match &args {
@@ -168,24 +124,6 @@ pub fn commandify(
             quote!()
         }
         SystemArgs::System { .. } => {
-            let ItemFn {
-                attrs,
-                vis,
-                sig,
-                block,
-            } = item;
-            let Signature {
-                constness,
-                asyncness,
-                unsafety,
-                abi,
-                fn_token,
-                ident,
-                generics,
-                inputs,
-                variadic,
-                ..
-            } = sig;
             quote!(
                 #(#attrs)*
                 #vis
