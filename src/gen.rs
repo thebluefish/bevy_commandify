@@ -150,9 +150,9 @@ pub fn commandify(
         #variadic
     );
 
-    let error_handler_present = error_handler.is_some();
+    let result_handler_present = error_handler.is_some() || ok_handler.is_some();
 
-    let fn_ident = if error_handler_present {
+    let fn_ident = if result_handler_present {
         Ident::new(&format!("{}_with_result", ident), ident.span())
     } else {
         ident.clone()
@@ -161,18 +161,35 @@ pub fn commandify(
     let original_fn_body = quote!(#block);
 
     // Define the result handling function body if an error handler is present.
-    let result_handling_fn_body = if error_handler_present {
+    let result_handling_fn_body = if result_handler_present {
         let fn_call = if def_field_names.is_empty() {
             quote!(#fn_ident(world))
         } else {
             quote!(#fn_ident(world, #(#def_field_names,)*))
         };
+
+        let ok_frag = if let Some(ok_handler) = ok_handler {
+            quote!(world.run_system_once_with(ok, #ok_handler))
+        } else {
+            quote!()
+        };
+
+        let err_frag = if let Some(err_handler) = error_handler {
+            quote!(world.run_system_once_with(error, #err_handler))
+        } else {
+            quote!()
+        };
+
         Some(quote!({
             use #ecs_root ::system::RunSystemOnce;
             let result = #fn_call;
             match result {
-                Ok(ok) => world.run_system_once_with(ok, #ok_handler),
-                Err(error) => world.run_system_once_with(error, #error_handler),
+                Ok(ok) => {
+                    #ok_frag
+                },
+                Err(error) => {
+                    #err_frag
+                },
             }
         }))
     } else {
@@ -180,14 +197,14 @@ pub fn commandify(
     };
 
     // Function signature output differs based on the presence of an error handler.
-    let fn_signature_output = if error_handler_present {
+    let fn_signature_output = if result_handler_present {
         quote!(#output)
     } else {
         quote!()
     };
 
     // Trait function output is only relevant if there is no error handler and `do_return` is true.
-    let trait_fn_output = if !error_handler_present && do_return {
+    let trait_fn_output = if !result_handler_present && do_return {
         quote!(#output)
     } else {
         quote!()
@@ -201,14 +218,16 @@ pub fn commandify(
         #original_fn_body
     );
 
-    let result_handling_fn = result_handling_fn_body.clone().map(|error_handling_block| {
-        quote!(
-            #fn_signature_prefix
-            #ident
-            #fn_signature_suffix
-            #error_handling_block
-        )
-    });
+    let result_handling_fn = result_handling_fn_body
+        .clone()
+        .map(|result_handling_block| {
+            quote!(
+                #fn_signature_prefix
+                #ident
+                #fn_signature_suffix
+                #result_handling_block
+            )
+        });
 
     let fn_body = result_handling_fn_body.unwrap_or_else(|| quote!(#block));
 

@@ -16,6 +16,8 @@ fn setup(mut commands: Commands) {
 
     commands.error_out(true);
     commands.error_out(false);
+    commands.only_ok();
+    commands.only_err();
 }
 
 fn check(query: Query<Entity, With<Transform>>) {
@@ -37,16 +39,24 @@ fn handle_ok(In(value): In<u32>) {
 }
 
 fn report_error(In(error): In<&'static str>) {
-    println!("Handling an Error: {:?}", error);
+    println!("Error: {}", error);
 }
 
 #[command(ok = handle_ok, err = report_error)]
 fn error_out(world: &mut World, success: bool) -> Result<u32, &'static str> {
     if success {
-        println!("Testing ok handler...");
         Ok(42)
     } else {
-        println!("Testing err handler...");
         Err("Something went wrong")
     }
+}
+
+#[command(ok = handle_ok)]
+fn only_ok(world: &mut World) -> Result<u32, &'static str> {
+    Ok(3)
+}
+
+#[command(err = report_error)]
+fn only_err(world: &mut World) -> Result<u32, &'static str> {
+    Err("It's okay to be in error.")
 }
