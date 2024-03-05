@@ -2,4 +2,4 @@ error: Name must be an ident, found path
  --> tests/ui/bad_path.rs:3:18
   |
 3 | #[command(name = foo::bar)]
-  |                  ^^^^^^^^
+  |                  ^^^
