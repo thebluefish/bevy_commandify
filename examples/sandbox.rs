@@ -18,6 +18,7 @@ fn setup(mut commands: Commands) {
     commands.error_out(false);
     commands.only_ok();
     commands.only_err();
+    commands.pipe_test(23);
 }
 
 fn check(query: Query<Entity, With<Transform>>) {
@@ -59,4 +60,13 @@ fn only_ok(world: &mut World) -> Result<u32, &'static str> {
 #[command(err = report_error)]
 fn only_err(world: &mut World) -> Result<u32, &'static str> {
     Err("It's okay to be in error.")
+}
+
+fn green_pipe(In(value): In<i32>) {
+    println!("Got {value} through the green pipe.");
+}
+
+#[command(pipe = green_pipe)]
+fn pipe_test(world: &mut World, some_value: i32) -> i32 {
+    some_value * 77
 }

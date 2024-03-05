@@ -17,6 +17,7 @@ pub struct MacroArgs {
     pub ecs_root: Option<Path>,
     pub ok_handler: Option<Ident>,
     pub error_handler: Option<Ident>,
+    pub pipe_destination: Option<Ident>,
 }
 
 /// parse macro args
@@ -29,6 +30,7 @@ pub fn macro_args(args: &Punctuated<Meta, Comma>, mut name: Ident) -> Result<Mac
     let mut ecs_root = None;
     let mut ok_handler = None;
     let mut error_handler = None;
+    let mut pipe_destination = None;
 
     // parse macro arguments
     for meta in args {
@@ -60,6 +62,9 @@ pub fn macro_args(args: &Punctuated<Meta, Comma>, mut name: Ident) -> Result<Mac
             Meta::NameValue(MetaNameValue { path, value, .. }) if path.is_ident("err") => {
                 error_handler = Some(value.try_to_ident()?);
             }
+            Meta::NameValue(MetaNameValue { path, value, .. }) if path.is_ident("pipe") => {
+                pipe_destination = Some(value.try_to_ident()?);
+            }
             _ => {
                 return Err(Error::new(
                     meta.span(),
@@ -78,6 +83,7 @@ pub fn macro_args(args: &Punctuated<Meta, Comma>, mut name: Ident) -> Result<Mac
         ecs_root,
         ok_handler,
         error_handler,
+        pipe_destination,
     })
 }
 
@@ -298,13 +304,7 @@ pub fn return_type(output: &ReturnType) -> Result<bool, Error> {
             {
                 true
             }
-            _ => false, // Type::Path(tp) if is_result(tp) => false,
-                        // _ => {
-                        //     return Err(Error::new(
-                        //         ty.span(),
-                        //         "command may not define a return type, except for `&mut Self`",
-                        //     ))
-                        // }
+            _ => false,
         },
         _ => false,
     };

@@ -50,6 +50,7 @@ pub fn commandify(
         ecs_root,
         ok_handler,
         error_handler,
+        pipe_destination,
     } = parse::macro_args(&args, ident.clone())?;
 
     // generate default names late so that the `name` field applies
@@ -150,61 +151,89 @@ pub fn commandify(
         #variadic
     );
 
-    let result_handler_present = error_handler.is_some() || ok_handler.is_some();
+    enum OutputHandler {
+        None,
+        Result,
+        Pipe,
+    }
 
-    let fn_ident = if result_handler_present {
-        Ident::new(&format!("{}_with_result", ident), ident.span())
+    let output_handler = if ok_handler.is_some() || error_handler.is_some() {
+        OutputHandler::Result
+    } else if pipe_destination.is_some() {
+        OutputHandler::Pipe
     } else {
-        ident.clone()
+        OutputHandler::None
+    };
+
+    //let result_handler_present = error_handler.is_some() || ok_handler.is_some();
+
+    let fn_ident = match output_handler {
+        OutputHandler::Result => Ident::new(&format!("{}_with_result", ident), ident.span()),
+        OutputHandler::Pipe => Ident::new(&format!("{}_with_pipe", ident), ident.span()),
+        OutputHandler::None => ident.clone(),
     };
 
     let original_fn_body = quote!(#block);
 
-    // Define the result handling function body if an error handler is present.
-    let result_handling_fn_body = if result_handler_present {
-        let fn_call = if def_field_names.is_empty() {
-            quote!(#fn_ident(world))
-        } else {
-            quote!(#fn_ident(world, #(#def_field_names,)*))
-        };
-
-        let ok_frag = if let Some(ok_handler) = ok_handler {
-            quote!(world.run_system_once_with(ok, #ok_handler))
-        } else {
-            quote!()
-        };
-
-        let err_frag = if let Some(err_handler) = error_handler {
-            quote!(world.run_system_once_with(error, #err_handler))
-        } else {
-            quote!()
-        };
-
-        Some(quote!({
-            use #ecs_root ::system::RunSystemOnce;
-            let result = #fn_call;
-            match result {
-                Ok(ok) => {
-                    #ok_frag
-                },
-                Err(error) => {
-                    #err_frag
-                },
-            }
-        }))
+    let fn_call = if def_field_names.is_empty() {
+        quote!(#fn_ident(world))
     } else {
-        None
+        quote!(#fn_ident(world, #(#def_field_names,)*))
     };
 
-    // Function signature output differs based on the presence of an error handler.
-    let fn_signature_output = if result_handler_present {
-        quote!(#output)
-    } else {
-        quote!()
+    // Define the result handling function body if an error handler is present.
+    let output_handling_fn_body = match output_handler {
+        OutputHandler::Result => {
+            let ok_frag = if let Some(ok_handler) = ok_handler {
+                quote!(world.run_system_once_with(ok, #ok_handler))
+            } else {
+                quote!()
+            };
+
+            let err_frag = if let Some(err_handler) = error_handler {
+                quote!(world.run_system_once_with(error, #err_handler))
+            } else {
+                quote!()
+            };
+
+            Some(quote!({
+                use #ecs_root ::system::RunSystemOnce;
+                let result = #fn_call;
+                match result {
+                    Ok(ok) => {
+                        #ok_frag
+                    },
+                    Err(error) => {
+                        #err_frag
+                    },
+                }
+            }))
+        }
+        OutputHandler::Pipe => {
+            let pipe_frag = if let Some(pipe_destination) = pipe_destination {
+                quote!(world.run_system_once_with(output, #pipe_destination))
+            } else {
+                quote!()
+            };
+
+            Some(quote!({
+                use #ecs_root ::system::RunSystemOnce;
+                let output = #fn_call;
+                #pipe_frag
+            }))
+        }
+        OutputHandler::None => None,
+    };
+
+    // Suppress function signature output if we're not handling output.
+    let fn_signature_output = match output_handler {
+        OutputHandler::Result => quote!(#output),
+        OutputHandler::Pipe => quote!(#output),
+        OutputHandler::None => quote!(),
     };
 
     // Trait function output is only relevant if there is no error handler and `do_return` is true.
-    let trait_fn_output = if !result_handler_present && do_return {
+    let trait_fn_output = if matches!(output_handler, OutputHandler::None) && do_return {
         quote!(#output)
     } else {
         quote!()
@@ -218,18 +247,18 @@ pub fn commandify(
         #original_fn_body
     );
 
-    let result_handling_fn = result_handling_fn_body
+    let output_handling_fn = output_handling_fn_body
         .clone()
-        .map(|result_handling_block| {
+        .map(|output_handling_block| {
             quote!(
                 #fn_signature_prefix
                 #ident
                 #fn_signature_suffix
-                #result_handling_block
+                #output_handling_block
             )
         });
 
-    let fn_body = result_handling_fn_body.unwrap_or_else(|| quote!(#block));
+    let fn_body = output_handling_fn_body.unwrap_or_else(|| quote!(#block));
 
     // which trait we're implementing for
     let command_trait = if entity_command {
@@ -428,7 +457,7 @@ pub fn commandify(
 
     Ok(quote!(
         #original_fn
-        #result_handling_fn
+        #output_handling_fn
         #(#attrs)*
         #vis
         #constness
