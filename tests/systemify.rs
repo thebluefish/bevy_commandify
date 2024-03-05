@@ -46,7 +46,7 @@ fn command() {
     schedule.run(&mut world);
 
     let mut queue = CommandQueue::default();
-    let mut commands = Commands::new(&mut queue, &mut world);
+    let mut commands = Commands::new(&mut queue, &world);
 
     // subtract 5 for irony and (5*2)+0 for one
     commands.irony().one((5, 0));
@@ -66,7 +66,7 @@ fn entity_command() {
     let entity = world.spawn(TestUsize(30)).id();
 
     let mut queue = CommandQueue::default();
-    let mut commands = Commands::new(&mut queue, &mut world);
+    let mut commands = Commands::new(&mut queue, &world);
 
     // method call on Commands
     commands.entity(entity).two(5);

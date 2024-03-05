@@ -30,7 +30,7 @@ fn command() {
     world.insert_resource(TestUsize(50));
 
     let mut queue = CommandQueue::default();
-    let mut commands = Commands::new(&mut queue, &mut world);
+    let mut commands = Commands::new(&mut queue, &world);
 
     // method call on Commands
     commands.foo(5);
@@ -56,7 +56,7 @@ fn entity_command() {
     let entity = world.spawn(TestUsize(50)).id();
 
     let mut queue = CommandQueue::default();
-    let mut commands = Commands::new(&mut queue, &mut world);
+    let mut commands = Commands::new(&mut queue, &world);
 
     // method call on Commands
     commands.entity(entity).bar(5);

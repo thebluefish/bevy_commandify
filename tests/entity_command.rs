@@ -15,7 +15,7 @@ fn marker_applied() {
     let mut world = World::new();
 
     let mut queue = CommandQueue::default();
-    let mut commands = Commands::new(&mut queue, &mut world);
+    let mut commands = Commands::new(&mut queue, &world);
 
     let mut entity_commands = commands.spawn_empty();
     let id = entity_commands.id();
