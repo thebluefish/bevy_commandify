@@ -15,6 +15,7 @@ pub struct MacroArgs {
     pub struct_name: Option<Ident>,
     pub trait_name: Option<Ident>,
     pub ecs_root: Option<Path>,
+    pub ok_handler: Option<Ident>,
     pub error_handler: Option<Ident>,
 }
 
@@ -26,6 +27,7 @@ pub fn macro_args(args: &Punctuated<Meta, Comma>, mut name: Ident) -> Result<Mac
     let mut struct_name = None;
     let mut trait_name = None;
     let mut ecs_root = None;
+    let mut ok_handler = None;
     let mut error_handler = None;
 
     // parse macro arguments
@@ -52,6 +54,9 @@ pub fn macro_args(args: &Punctuated<Meta, Comma>, mut name: Ident) -> Result<Mac
             Meta::NameValue(MetaNameValue { path, value, .. }) if path.is_ident("ecs") => {
                 ecs_root = Some(value.try_to_path()?);
             }
+            Meta::NameValue(MetaNameValue { path, value, .. }) if path.is_ident("ok") => {
+                ok_handler = Some(value.try_to_ident()?);
+            }
             Meta::NameValue(MetaNameValue { path, value, .. }) if path.is_ident("err") => {
                 error_handler = Some(value.try_to_ident()?);
             }
@@ -71,6 +76,7 @@ pub fn macro_args(args: &Punctuated<Meta, Comma>, mut name: Ident) -> Result<Mac
         struct_name,
         trait_name,
         ecs_root,
+        ok_handler,
         error_handler,
     })
 }

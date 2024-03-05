@@ -1,6 +1,5 @@
 use bevy::prelude::*;
 use bevy_commandify::*;
-use bevy_ecs::system::RunSystemOnce;
 
 fn main() {
     App::new()
@@ -14,7 +13,9 @@ fn setup(mut commands: Commands) {
         n: 3,
     });
     commands.create_stuff(TransformBundle::default(), 3);
+
     commands.error_out(true);
+    commands.error_out(false);
 }
 
 fn check(query: Query<Entity, With<Transform>>) {
@@ -31,16 +32,21 @@ fn create_stuff<B: Bundle + Clone>(world: &mut World, bundle: B, n: usize) {
     }
 }
 
+fn handle_ok(In(value): In<u32>) {
+    println!("Everything is fine. See: {}", value);
+}
+
 fn report_error(In(error): In<&'static str>) {
     println!("Handling an Error: {:?}", error);
 }
 
-#[command(err = report_error)]
-fn error_out(world: &mut World, success: bool) -> Result<(), &'static str> {
+#[command(ok = handle_ok, err = report_error)]
+fn error_out(world: &mut World, success: bool) -> Result<u32, &'static str> {
     if success {
-        println!("Everything is fine");
-        Ok(())
+        println!("Testing ok handler...");
+        Ok(42)
     } else {
+        println!("Testing err handler...");
         Err("Something went wrong")
     }
 }

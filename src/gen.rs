@@ -48,6 +48,7 @@ pub fn commandify(
         struct_name,
         trait_name,
         ecs_root,
+        ok_handler,
         error_handler,
     } = parse::macro_args(&args, ident.clone())?;
 
@@ -167,9 +168,11 @@ pub fn commandify(
             quote!(#fn_ident(world, #(#def_field_names,)*))
         };
         Some(quote!({
+            use #ecs_root ::system::RunSystemOnce;
             let result = #fn_call;
-            if let Err(error) = result {
-                world.run_system_once_with(error, #error_handler);
+            match result {
+                Ok(ok) => world.run_system_once_with(ok, #ok_handler),
+                Err(error) => world.run_system_once_with(error, #error_handler),
             }
         }))
     } else {
