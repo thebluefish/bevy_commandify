@@ -169,7 +169,7 @@ pub fn commandify(
 
     let fn_ident = match output_handler {
         OutputHandler::Result => Ident::new(&format!("{}_with_result", ident), ident.span()),
-        OutputHandler::Pipe => Ident::new(&format!("{}_with_pipe", ident), ident.span()),
+        OutputHandler::Pipe => Ident::new(&format!("{}_with_output", ident), ident.span()),
         OutputHandler::None => ident.clone(),
     };
 
