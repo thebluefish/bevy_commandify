@@ -118,6 +118,20 @@ pub fn commandify(
         quote!(< #(#generic_names,)* >)
     };
 
+    // The inputs passed to our system
+    let system_in_frag = match &args {
+        SystemArgs::Exclusive { .. } => quote!(),
+        SystemArgs::System { systems_in, .. } => {
+            if systems_in.len() > 1 {
+                quote!((#(#systems_in,)*))
+            } else if let Some(field) = systems_in.last() {
+                quote!(#field)
+            } else {
+                quote!()
+            }
+        }
+    };
+
     let fn_signature_prefix = quote!(
         #[allow(unused)]
         #(#attrs)*
@@ -147,8 +161,13 @@ pub fn commandify(
 
     // Define the result handling function body if an error handler is present.
     let result_handling_fn_body = if error_handler_present {
+        let fn_call = if def_field_names.is_empty() {
+            quote!(#fn_ident(world))
+        } else {
+            quote!(#fn_ident(world, #(#def_field_names,)*))
+        };
         Some(quote!({
-            let result = #fn_ident(world);
+            let result = #fn_call;
             if let Err(error) = result {
                 world.run_system_once_with(error, #error_handler);
             }
@@ -204,20 +223,6 @@ pub fn commandify(
         quote!( ; )
     } else {
         quote!( { #(pub #fields,)* } )
-    };
-
-    // The inputs passed to our system
-    let system_in_frag = match &args {
-        SystemArgs::Exclusive { .. } => quote!(),
-        SystemArgs::System { systems_in, .. } => {
-            if systems_in.len() > 1 {
-                quote!((#(#systems_in,)*))
-            } else if let Some(field) = systems_in.last() {
-                quote!(#field)
-            } else {
-                quote!()
-            }
-        }
     };
 
     // Generates a `Commands` or `EntityCommands` impl for our struct

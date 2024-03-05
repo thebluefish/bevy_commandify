@@ -14,7 +14,7 @@ fn setup(mut commands: Commands) {
         n: 3,
     });
     commands.create_stuff(TransformBundle::default(), 3);
-    commands.error_out();
+    commands.error_out(true);
 }
 
 fn check(query: Query<Entity, With<Transform>>) {
@@ -36,6 +36,11 @@ fn report_error(In(error): In<&'static str>) {
 }
 
 #[command(err = report_error)]
-fn error_out(world: &mut World) -> Result<(), &'static str> {
-    Err("something went wrong")
+fn error_out(world: &mut World, success: bool) -> Result<(), &'static str> {
+    if success {
+        println!("Everything is fine");
+        Ok(())
+    } else {
+        Err("Something went wrong")
+    }
 }
