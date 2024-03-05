@@ -15,6 +15,7 @@ pub struct MacroArgs {
     pub struct_name: Option<Ident>,
     pub trait_name: Option<Ident>,
     pub ecs_root: Option<Path>,
+    pub error_handler: Option<Ident>,
 }
 
 /// parse macro args
@@ -25,6 +26,7 @@ pub fn macro_args(args: &Punctuated<Meta, Comma>, mut name: Ident) -> Result<Mac
     let mut struct_name = None;
     let mut trait_name = None;
     let mut ecs_root = None;
+    let mut error_handler = None;
 
     // parse macro arguments
     for meta in args {
@@ -50,6 +52,9 @@ pub fn macro_args(args: &Punctuated<Meta, Comma>, mut name: Ident) -> Result<Mac
             Meta::NameValue(MetaNameValue { path, value, .. }) if path.is_ident("ecs") => {
                 ecs_root = Some(value.try_to_path()?);
             }
+            Meta::NameValue(MetaNameValue { path, value, .. }) if path.is_ident("err") => {
+                error_handler = Some(value.try_to_ident()?);
+            }
             _ => {
                 return Err(Error::new(
                     meta.span(),
@@ -66,6 +71,7 @@ pub fn macro_args(args: &Punctuated<Meta, Comma>, mut name: Ident) -> Result<Mac
         struct_name,
         trait_name,
         ecs_root,
+        error_handler,
     })
 }
 
@@ -286,12 +292,13 @@ pub fn return_type(output: &ReturnType) -> Result<bool, Error> {
             {
                 true
             }
-            _ => {
-                return Err(Error::new(
-                    ty.span(),
-                    "command may not define a return type, except for `&mut Self`",
-                ))
-            }
+            _ => false, // Type::Path(tp) if is_result(tp) => false,
+                        // _ => {
+                        //     return Err(Error::new(
+                        //         ty.span(),
+                        //         "command may not define a return type, except for `&mut Self`",
+                        //     ))
+                        // }
         },
         _ => false,
     };

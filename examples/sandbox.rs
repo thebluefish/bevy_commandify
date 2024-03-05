@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 use bevy_commandify::*;
+use bevy_ecs::system::RunSystemOnce;
 
 fn main() {
     App::new()
@@ -13,6 +14,7 @@ fn setup(mut commands: Commands) {
         n: 3,
     });
     commands.create_stuff(TransformBundle::default(), 3);
+    commands.error_out();
 }
 
 fn check(query: Query<Entity, With<Transform>>) {
@@ -27,4 +29,13 @@ fn create_stuff<B: Bundle + Clone>(world: &mut World, bundle: B, n: usize) {
     for _ in 0..n {
         world.spawn(bundle.clone());
     }
+}
+
+fn report_error(In(error): In<&'static str>) {
+    println!("Handling an Error: {:?}", error);
+}
+
+#[command(err = report_error)]
+fn error_out(world: &mut World) -> Result<(), &'static str> {
+    Err("something went wrong")
 }
