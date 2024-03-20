@@ -123,7 +123,7 @@ pub fn fn_args(inputs: &Punctuated<FnArg, Comma>, entity_command: bool) -> Resul
                     Type::Path(path) => {
                         if let Some(seg) = path.path.segments.last() {
                             let ident = &seg.ident;
-                            if entity_command && ident == "Entity" {
+                            if entity_command && ident == "Entity" && entity_field.is_none() {
                                 entity_field = Some(quote!(#pt));
                                 continue;
                             } else if ident == "In" {
