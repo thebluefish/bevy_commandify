@@ -28,7 +28,7 @@ fn chain_commands() {
     world.insert_resource(TestUsize(30));
 
     let mut queue = CommandQueue::default();
-    let mut commands = Commands::new(&mut queue, &mut world);
+    let mut commands = Commands::new(&mut queue, &world);
 
     // method call on Commands
     commands.foo(10).foo(10);
@@ -48,7 +48,7 @@ fn chain_entity_commands() {
     let entity = world.spawn(TestUsize(30)).id();
 
     let mut queue = CommandQueue::default();
-    let mut commands = Commands::new(&mut queue, &mut world);
+    let mut commands = Commands::new(&mut queue, &world);
 
     // method call on Commands
     commands.entity(entity).bar(10).bar(10);
@@ -69,7 +69,7 @@ fn spawn_chain_commands() {
     let mut world = World::new();
 
     let mut queue = CommandQueue::default();
-    let mut commands = Commands::new(&mut queue, &mut world);
+    let mut commands = Commands::new(&mut queue, &world);
 
     // The operation effectively does nothing since we replace it right after
     commands.spawn(TestUsize(10)).bar(5).insert(TestUsize(100));

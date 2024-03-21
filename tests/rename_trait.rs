@@ -27,7 +27,7 @@ fn renamed_trait() {
     world.insert_resource(TestUsize(10));
 
     let mut queue = CommandQueue::default();
-    let mut commands = Commands::new(&mut queue, &mut world);
+    let mut commands = Commands::new(&mut queue, &world);
 
     // Call via Commands
     FooExt::add(&mut commands, 10);
@@ -47,7 +47,7 @@ fn renamed_entity_trait() {
     let entity = world.spawn(TestUsize(30)).id();
 
     let mut queue = CommandQueue::default();
-    let mut commands = Commands::new(&mut queue, &mut world);
+    let mut commands = Commands::new(&mut queue, &world);
 
     // Call via Commands
     BarExt::do_sub(&mut commands.entity(entity), 10);

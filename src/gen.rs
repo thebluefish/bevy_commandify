@@ -48,6 +48,9 @@ pub fn commandify(
         struct_name,
         trait_name,
         ecs_root,
+        ok_handler,
+        error_handler,
+        pipe_destination,
     } = parse::macro_args(&args, ident.clone())?;
 
     // generate default names late so that the `name` field applies
@@ -117,8 +120,21 @@ pub fn commandify(
         quote!(< #(#generic_names,)* >)
     };
 
-    // piece back the original system sans return type
-    let fn_frag = quote!(
+    // The inputs passed to our system
+    let system_in_frag = match &args {
+        SystemArgs::Exclusive { .. } => quote!(),
+        SystemArgs::System { systems_in, .. } => {
+            if systems_in.len() > 1 {
+                quote!((#(#systems_in,)*))
+            } else if let Some(field) = systems_in.last() {
+                quote!(#field)
+            } else {
+                quote!()
+            }
+        }
+    };
+
+    let fn_signature_prefix = quote!(
         #[allow(unused)]
         #(#attrs)*
         #vis
@@ -127,12 +143,122 @@ pub fn commandify(
         #unsafety
         #abi
         #fn_token
-        #ident
+    );
+
+    let fn_signature_suffix = quote!(
         #generics
         (#inputs)
         #variadic
-        #block
     );
+
+    enum OutputHandler {
+        None,
+        Result,
+        Pipe,
+    }
+
+    let output_handler = if ok_handler.is_some() || error_handler.is_some() {
+        OutputHandler::Result
+    } else if pipe_destination.is_some() {
+        OutputHandler::Pipe
+    } else {
+        OutputHandler::None
+    };
+
+    //let result_handler_present = error_handler.is_some() || ok_handler.is_some();
+
+    let fn_ident = match output_handler {
+        OutputHandler::Result => Ident::new(&format!("{}_with_result", ident), ident.span()),
+        OutputHandler::Pipe => Ident::new(&format!("{}_with_output", ident), ident.span()),
+        OutputHandler::None => ident.clone(),
+    };
+
+    let original_fn_body = quote!(#block);
+
+    let fn_call = if def_field_names.is_empty() {
+        quote!(#fn_ident(world))
+    } else {
+        quote!(#fn_ident(world, #(#def_field_names,)*))
+    };
+
+    // Define the result handling function body if an error handler is present.
+    let output_handling_fn_body = match output_handler {
+        OutputHandler::Result => {
+            let ok_frag = if let Some(ok_handler) = ok_handler {
+                quote!(world.run_system_once_with(ok, #ok_handler))
+            } else {
+                quote!()
+            };
+
+            let err_frag = if let Some(err_handler) = error_handler {
+                quote!(world.run_system_once_with(error, #err_handler))
+            } else {
+                quote!()
+            };
+
+            Some(quote!({
+                use #ecs_root ::system::RunSystemOnce;
+                let result = #fn_call;
+                match result {
+                    Ok(ok) => {
+                        #ok_frag
+                    },
+                    Err(error) => {
+                        #err_frag
+                    },
+                }
+            }))
+        }
+        OutputHandler::Pipe => {
+            let pipe_frag = if let Some(pipe_destination) = pipe_destination {
+                quote!(world.run_system_once_with(output, #pipe_destination))
+            } else {
+                quote!()
+            };
+
+            Some(quote!({
+                use #ecs_root ::system::RunSystemOnce;
+                let output = #fn_call;
+                #pipe_frag
+            }))
+        }
+        OutputHandler::None => None,
+    };
+
+    // Suppress function signature output if we're not handling output.
+    let fn_signature_output = match output_handler {
+        OutputHandler::Result => quote!(#output),
+        OutputHandler::Pipe => quote!(#output),
+        OutputHandler::None => quote!(),
+    };
+
+    // Trait function output is only relevant if there is no error handler and `do_return` is true.
+    let trait_fn_output = if matches!(output_handler, OutputHandler::None) && do_return {
+        quote!(#output)
+    } else {
+        quote!()
+    };
+
+    let original_fn = quote!(
+        #fn_signature_prefix
+        #fn_ident
+        #fn_signature_suffix
+        #fn_signature_output
+        #original_fn_body
+    );
+
+    let output_handling_fn = output_handling_fn_body
+        .clone()
+        .map(|output_handling_block| {
+            quote!(
+                #fn_signature_prefix
+                #ident
+                #fn_signature_suffix
+                #output_handling_block
+            )
+        });
+
+    let fn_body = output_handling_fn_body.unwrap_or_else(|| quote!(#block));
 
     // which trait we're implementing for
     let command_trait = if entity_command {
@@ -150,20 +276,6 @@ pub fn commandify(
         quote!( { #(pub #fields,)* } )
     };
 
-    // The inputs passed to our system
-    let system_in_frag = match &args {
-        SystemArgs::Exclusive { .. } => quote!(),
-        SystemArgs::System { systems_in, .. } => {
-            if systems_in.len() > 1 {
-                quote!((#(#systems_in,)*))
-            } else if let Some(field) = systems_in.last() {
-                quote!(#field)
-            } else {
-                quote!()
-            }
-        }
-    };
-
     // Generates a `Commands` or `EntityCommands` impl for our struct
     let impl_command_frag = match &args {
         SystemArgs::Exclusive { world } => {
@@ -177,7 +289,7 @@ pub fn commandify(
                 impl #generics #ecs_root ::system:: #command_trait for #struct_name #generic_names {
                     fn apply #apply_params {
                         let #struct_name {#(#impl_field_names,)*} = self;
-                        #block
+                        #fn_body
                     }
                 }
             )
@@ -226,11 +338,11 @@ pub fn commandify(
                 quote!(
                     pub trait #trait_name {
                         #docs
-                        fn #name #generics (&mut self, #(#fields,)*) #output;
+                        fn #name #generics (&mut self, #(#fields,)*) #trait_fn_output;
                     }
 
                     impl #trait_name for #ecs_root ::system:: #commands_struct {
-                        fn #name #generics (&mut self, #(#fields,)*) #output {
+                        fn #name #generics (&mut self, #(#fields,)*) #trait_fn_output {
                             self.add(#struct_name {#(#def_field_names,)*});
                             #return_frag
                         }
@@ -251,11 +363,11 @@ pub fn commandify(
                 quote!(
                     pub trait #trait_name {
                         #docs
-                        fn #name #generics (&mut self #(,#fields,)*) #output;
+                        fn #name #generics (&mut self #(,#fields,)*) #trait_fn_output;
                     }
 
                     impl #trait_name for #ecs_root ::system:: #commands_struct {
-                        fn #name #generics (&mut self #(,#fields,)*) #output {
+                        fn #name #generics (&mut self #(,#fields,)*) #trait_fn_output {
                             self.add(#struct_name {#(#def_field_names,)*});
                             #return_frag
                         }
@@ -273,7 +385,7 @@ pub fn commandify(
             } else if entity_command {
                 quote!(
                     impl #trait_name for #ecs_root ::world::EntityWorldMut<'_> {
-                        fn #name #generics (&mut self, #(#fields,)*) #output {
+                        fn #name #generics (&mut self, #(#fields,)*) #trait_fn_output {
                             let id = self.id();
                             self.world_scope(|world| {
                                 <#struct_name #generic_names as #ecs_root ::system:: #command_trait>::apply (#struct_name {#(#def_field_names,)*}, id, world);
@@ -285,7 +397,7 @@ pub fn commandify(
             } else {
                 quote!(
                     impl #trait_name for #ecs_root ::world::World {
-                        fn #name #generics (&mut self, #(#fields,)*) #output {
+                        fn #name #generics (&mut self, #(#fields,)*) #trait_fn_output {
                             <#struct_name #generic_names as #ecs_root ::system:: #command_trait>::apply (#struct_name {#(#def_field_names,)*}, self);
                             #return_frag
                         }
@@ -321,7 +433,7 @@ pub fn commandify(
             } else if fields.is_empty() {
                 quote!(
                     impl #trait_name for #root {
-                        fn #name #generics (&mut self)  #output {
+                        fn #name #generics (&mut self) #trait_fn_output {
                             use ::bevy::ecs::system::RunSystemOnce;
                             self.run_system_once(#ident);
                             #return_frag
@@ -331,7 +443,7 @@ pub fn commandify(
             } else {
                 quote!(
                     impl #trait_name for #root {
-                        fn #name #generics (&mut self #(,#fields)*)  #output {
+                        fn #name #generics (&mut self #(,#fields)*) #trait_fn_output {
                             use ::bevy::ecs::system::RunSystemOnce;
                             #entity_frag
                             #run_frag
@@ -344,7 +456,8 @@ pub fn commandify(
     };
 
     Ok(quote!(
-        #fn_frag
+        #original_fn
+        #output_handling_fn
         #(#attrs)*
         #vis
         #constness

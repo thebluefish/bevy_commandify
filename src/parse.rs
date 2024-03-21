@@ -15,6 +15,9 @@ pub struct MacroArgs {
     pub struct_name: Option<Ident>,
     pub trait_name: Option<Ident>,
     pub ecs_root: Option<Path>,
+    pub ok_handler: Option<Ident>,
+    pub error_handler: Option<Ident>,
+    pub pipe_destination: Option<Ident>,
 }
 
 /// parse macro args
@@ -25,6 +28,9 @@ pub fn macro_args(args: &Punctuated<Meta, Comma>, mut name: Ident) -> Result<Mac
     let mut struct_name = None;
     let mut trait_name = None;
     let mut ecs_root = None;
+    let mut ok_handler = None;
+    let mut error_handler = None;
+    let mut pipe_destination = None;
 
     // parse macro arguments
     for meta in args {
@@ -50,6 +56,15 @@ pub fn macro_args(args: &Punctuated<Meta, Comma>, mut name: Ident) -> Result<Mac
             Meta::NameValue(MetaNameValue { path, value, .. }) if path.is_ident("ecs") => {
                 ecs_root = Some(value.try_to_path()?);
             }
+            Meta::NameValue(MetaNameValue { path, value, .. }) if path.is_ident("ok") => {
+                ok_handler = Some(value.try_to_ident()?);
+            }
+            Meta::NameValue(MetaNameValue { path, value, .. }) if path.is_ident("err") => {
+                error_handler = Some(value.try_to_ident()?);
+            }
+            Meta::NameValue(MetaNameValue { path, value, .. }) if path.is_ident("pipe") => {
+                pipe_destination = Some(value.try_to_ident()?);
+            }
             _ => {
                 return Err(Error::new(
                     meta.span(),
@@ -66,6 +81,9 @@ pub fn macro_args(args: &Punctuated<Meta, Comma>, mut name: Ident) -> Result<Mac
         struct_name,
         trait_name,
         ecs_root,
+        ok_handler,
+        error_handler,
+        pipe_destination,
     })
 }
 
@@ -123,7 +141,7 @@ pub fn fn_args(inputs: &Punctuated<FnArg, Comma>, entity_command: bool) -> Resul
                     Type::Path(path) => {
                         if let Some(seg) = path.path.segments.last() {
                             let ident = &seg.ident;
-                            if entity_command && ident == "Entity" {
+                            if entity_command && ident == "Entity" && entity_field.is_none() {
                                 entity_field = Some(quote!(#pt));
                                 continue;
                             } else if ident == "In" {
@@ -286,12 +304,7 @@ pub fn return_type(output: &ReturnType) -> Result<bool, Error> {
             {
                 true
             }
-            _ => {
-                return Err(Error::new(
-                    ty.span(),
-                    "command may not define a return type, except for `&mut Self`",
-                ))
-            }
+            _ => false,
         },
         _ => false,
     };

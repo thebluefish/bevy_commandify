@@ -13,6 +13,12 @@ fn setup(mut commands: Commands) {
         n: 3,
     });
     commands.create_stuff(TransformBundle::default(), 3);
+
+    commands.error_out(true);
+    commands.error_out(false);
+    commands.only_ok();
+    commands.only_err();
+    commands.pipe_test(23);
 }
 
 fn check(query: Query<Entity, With<Transform>>) {
@@ -27,4 +33,40 @@ fn create_stuff<B: Bundle + Clone>(world: &mut World, bundle: B, n: usize) {
     for _ in 0..n {
         world.spawn(bundle.clone());
     }
+}
+
+fn handle_ok(In(value): In<u32>) {
+    println!("Everything is fine. See: {}", value);
+}
+
+fn report_error(In(error): In<&'static str>) {
+    println!("Error: {}", error);
+}
+
+#[command(ok = handle_ok, err = report_error)]
+fn error_out(world: &mut World, success: bool) -> Result<u32, &'static str> {
+    if success {
+        Ok(42)
+    } else {
+        Err("Something went wrong")
+    }
+}
+
+#[command(ok = handle_ok)]
+fn only_ok(world: &mut World) -> Result<u32, &'static str> {
+    Ok(3)
+}
+
+#[command(err = report_error)]
+fn only_err(world: &mut World) -> Result<u32, &'static str> {
+    Err("It's okay to be in error.")
+}
+
+fn green_pipe(In(value): In<i32>) {
+    println!("Got {value} through the green pipe.");
+}
+
+#[command(pipe = green_pipe)]
+fn pipe_test(world: &mut World, some_value: i32) -> i32 {
+    some_value * 77
 }

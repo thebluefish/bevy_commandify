@@ -27,7 +27,7 @@ fn renamed_struct() {
     world.insert_resource(TestUsize(10));
 
     let mut queue = CommandQueue::default();
-    let mut commands = Commands::new(&mut queue, &mut world);
+    let mut commands = Commands::new(&mut queue, &world);
 
     // Call via Commands
     commands.add(Foo { n: 10 });
@@ -44,7 +44,7 @@ fn renamed_entity_struct() {
     let entity = world.spawn(TestUsize(20)).id();
 
     let mut queue = CommandQueue::default();
-    let mut commands = Commands::new(&mut queue, &mut world);
+    let mut commands = Commands::new(&mut queue, &world);
 
     commands.entity(entity).add(Bar { n: 10 });
     commands.entity(entity).do_sub(10);

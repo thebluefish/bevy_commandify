@@ -27,7 +27,7 @@ fn foo_becomes_sub() {
     world.insert_resource(TestUsize(30));
 
     let mut queue = CommandQueue::default();
-    let mut commands = Commands::new(&mut queue, &mut world);
+    let mut commands = Commands::new(&mut queue, &world);
 
     // method call on Commands
     commands.sub(10);
@@ -53,7 +53,7 @@ fn bar_becomes_bus() {
     let entity = world.spawn(TestUsize(30)).id();
 
     let mut queue = CommandQueue::default();
-    let mut commands = Commands::new(&mut queue, &mut world);
+    let mut commands = Commands::new(&mut queue, &world);
 
     // method call on Commands
     commands.entity(entity).bus(10);
