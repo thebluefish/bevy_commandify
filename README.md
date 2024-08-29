@@ -1,6 +1,14 @@
 [![Crates.io](https://img.shields.io/crates/v/bevy_commandify.svg)](https://crates.io/crates/bevy_commandify)
 [![Docs](https://docs.rs/bevy_commandify/badge.svg)](https://docs.rs/bevy_commandify/latest/bevy_commandify/)
 
+---
+
+I cannot find the time to maintain this project and will not be updating it for future bevy versions going forward. Any interested maintainer can contact me here or discord (s33n) if they wish to take over the project on crates.io. You are otherwise always allowed to fork and update this project as you wish.
+
+- Cheers
+
+---
+
 A macro for creating bevy `Commands` and `EntityCommands` methods from functions.
 
 ## Examples
